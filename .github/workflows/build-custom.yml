@@ -200,7 +200,7 @@ jobs:
           Compress-Archive -Path ./rustdesk/* -DestinationPath ./custom_client.zip
 
       - name: Upload Finished Custom Client Zip
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.client_payload.client_guid || github.event.inputs.client_guid }}-windows
           path: ./custom_client.zip
