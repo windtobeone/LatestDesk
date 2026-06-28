@@ -131,7 +131,8 @@ jobs:
 
       - name: Generate Custom Icons and Assets
         run: |
-          python make_icons.py "${{ github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}" "${{ github.event.client_payload.client_name || github.event.inputs.client_name }}"
+          Set-Content -Path logo_base64.txt -Value "${{ github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}"
+          python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name || github.event.inputs.client_name }}"
 
       - name: Setup Custom Environment variables for oneKey.py
         shell: bash

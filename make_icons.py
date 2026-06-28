@@ -13,6 +13,15 @@ def colorize_to_solid(img, color=(255, 255, 255, 255)):
     return Image.composite(solid_img, Image.new("RGBA", img.size, (0, 0, 0, 0)), a)
 
 def generate_icons(logo_base64_str, app_name, target_dir="."):
+    # 💡 支持从文件中读取 base64 字符串以规避 Windows 命令行长度限制 (Windows cmd limit is 8191 chars)
+    if os.path.exists(logo_base64_str):
+        print(f"📖 Reading base64 string from file: {logo_base64_str}")
+        try:
+            with open(logo_base64_str, "r", encoding="utf-8") as f:
+                logo_base64_str = f.read().strip()
+        except Exception as e:
+            print(f"⚠️ Failed to read base64 file: {e}")
+
     # 💡 安全防护：如果未传入自定义图标/Logo，则保留官方默认图标并安全退出
     if not logo_base64_str or not logo_base64_str.strip():
         print("⏭️ No custom logo or icon base64 provided. Keeping official/default RustDesk icons.")
