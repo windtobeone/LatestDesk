@@ -2,8 +2,6 @@ name: Build Custom Client
 on:
   workflow_dispatch:
     inputs:
-  repository_dispatch:
-    types: [build-custom-client]
       client_guid:
         description: 'Unique identifier of custom client'
         required: true
@@ -34,6 +32,8 @@ on:
       apply_patches:
         description: 'Comma-separated patch ids to apply (e.g. 03)'
         required: false
+  repository_dispatch:
+    types: [build-custom-client]
 
 env:
   SCITER_RUST_VERSION: "1.75"
