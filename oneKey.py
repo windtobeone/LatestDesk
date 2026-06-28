@@ -3,7 +3,7 @@ import base64
 import subprocess
 
 # ==========================================
-# 第一部分：全局定制参数 (自适应读取 GitHub Actions 环境变量)
+# Part 1: Global customization parameters (Read from GitHub Actions environment)
 # ==========================================
 NEW_APP_NAME = os.getenv("NEW_APP_NAME", "QQanDesk")
 NEW_EXE_NAME = os.getenv("NEW_EXE_NAME", "QQnDesk.exe")
@@ -15,7 +15,7 @@ NEW_IP       = os.getenv("NEW_IP", "192.168.201.129")
 NEW_PUB_KEY  = os.getenv("NEW_PUB_KEY", "4Z9UuzUy2tVgRWqyPJ84813O7AgP0yhzg9wE3g7Kk9I=")
 
 # ==========================================
-# 提取的复杂多行代码替换块
+# Extracted multi-line code blocks for replacement
 # ==========================================
 OLD_LOAD_POWERED = """Widget loadPowered(BuildContext context) {
   if (bind.mainGetBuildinOption(key: "hide-powered-by-me") == 'Y') {
@@ -56,7 +56,7 @@ NEW_TAB_TEXT = """child: Text(
                             )"""
 
 # ==========================================
-# 第二部分：替换规则配置表
+# Part 2: Replacement rules mapping
 # ==========================================
 REPLACEMENTS = {
     "Cargo.toml": [
@@ -165,7 +165,7 @@ REPLACEMENTS = {
         ('"https://admin.rustdesk.com/api/login"', f'"{NEW_URL}/api/login"')
     ],
     "src/lang.rs": [
-        ('&& name != "powered_by_me"', ' ') # 替换为空格，保持 Rust 语法正确
+        ('&& name != "powered_by_me"', ' ')
     ],
     "src/main.rs": [
         ('App::new("rustdesk")', f'App::new("{NEW_PREFIX}")'),
@@ -175,16 +175,16 @@ REPLACEMENTS = {
 }
 
 # ==========================================
-# 第三部分：核心执行逻辑
+# Part 3: Core execution logic
 # ==========================================
 def apply_customization():
-    print(f"🚀 开始定制化修改，目标名称: {NEW_APP_NAME}")
+    print(f"Info: Starting customization for target app: {NEW_APP_NAME}")
     success_count = 0
     fail_count = 0
 
     for filepath, rules in REPLACEMENTS.items():
         if not os.path.exists(filepath):
-            print(f"⚠️  文件不存在，跳过: {filepath}")
+            print(f"Skip: File does not exist: {filepath}")
             fail_count += 1
             continue
             
@@ -199,21 +199,21 @@ def apply_customization():
             if content != original_content:
                 with open(filepath, 'w', encoding='utf-8') as f:
                     f.write(content)
-                print(f"✅ 成功修改: {filepath}")
+                print(f"Success: Modified file: {filepath}")
                 success_count += 1
             else:
-                print(f"⏭️  无需修改 (或规则已应用): {filepath}")
+                print(f"Skip: No modification needed for: {filepath}")
                 
         except Exception as e:
-            print(f"❌ 修改失败: {filepath} \n   错误详情: {e}")
+            print(f"Error: Failed to modify {filepath}: {e}")
             fail_count += 1
 
     print("\n" + "="*35)
-    print(f"🎉 定制完成! 成功修改 {success_count} 个文件，跳过/失败 {fail_count} 个。")
+    print(f"Customization done! Successfully modified {success_count} files, skipped/failed {fail_count} files.")
     print("="*35)
 
     # ==========================================
-    # 第四部分：custom.txt 动态解密与写入
+    # Part 4: custom.txt dynamic decryption and write
     # ==========================================
     custom_txt_b64 = os.getenv("CUSTOM_TXT_BASE64", "")
     if custom_txt_b64:
@@ -222,17 +222,17 @@ def apply_customization():
             os.makedirs("src", exist_ok=True)
             with open("src/custom.txt", "wb") as f:
                 f.write(decoded)
-            print("✅ custom.txt written successfully")
+            print("Success: custom.txt written successfully")
         except Exception as e:
-            print(f"❌ Failed to write custom.txt: {e}")
+            print(f"Error: Failed to write custom.txt: {e}")
 
     # ==========================================
-    # 第五部分：Git 补丁自适应非交互式注入引擎
+    # Part 5: Git patch auto-injection engine
     # ==========================================
     apply_patches_str = os.getenv("APPLY_PATCHES", "")
     if apply_patches_str:
         patch_ids = [p.strip() for p in apply_patches_str.split(",") if p.strip()]
-        print(f"📦 Found patches to apply: {patch_ids}")
+        print(f"Info: Found patches to apply: {patch_ids}")
         
         patch_dir = "patches"
         if os.path.exists(patch_dir):
@@ -242,14 +242,14 @@ def apply_customization():
                     if parts:
                         idx = parts[0].strip()
                         if idx in patch_ids:
-                            print(f"⚙️ Applying patch: {filename}")
+                            print(f"Info: Applying patch: {filename}")
                             patch_path = os.path.join(patch_dir, filename)
                             cmd = ["git", "apply", "--recount", "--ignore-whitespace", "--whitespace=nowarn", patch_path]
                             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                             if res.returncode == 0:
-                                print(f"✅ Applied successfully: {filename}")
+                                print(f"Success: Applied patch successfully: {filename}")
                             else:
-                                print(f"❌ Failed to apply {filename}: {res.stderr}")
+                                print(f"Error: Failed to apply patch {filename}: {res.stderr}")
 
 if __name__ == '__main__':
     apply_customization()
