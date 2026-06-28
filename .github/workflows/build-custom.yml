@@ -2,6 +2,8 @@ name: Build Custom Client
 on:
   workflow_dispatch:
     inputs:
+  repository_dispatch:
+    types: [build-custom-client]
       client_guid:
         description: 'Unique identifier of custom client'
         required: true
@@ -131,19 +133,19 @@ jobs:
 
       - name: Generate Custom Icons and Assets
         run: |
-          python make_icons.py "${{ github.event.inputs.logo_png_base64 }}" "${{ github.event.inputs.client_name }}"
+          python make_icons.py "${{ github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}" "${{ github.event.client_payload.client_name || github.event.inputs.client_name }}"
 
       - name: Setup Custom Environment variables for oneKey.py
         shell: bash
         run: |
-          echo "NEW_APP_NAME=${{ github.event.inputs.client_name }}" >> $GITHUB_ENV
-          echo "NEW_EXE_NAME=${{ github.event.inputs.client_exe_name }}" >> $GITHUB_ENV
-          echo "NEW_PREFIX=${{ github.event.inputs.client_prefix }}" >> $GITHUB_ENV
-          echo "NEW_IP=${{ github.event.inputs.relay_host }}" >> $GITHUB_ENV
-          echo "NEW_PUB_KEY=${{ github.event.inputs.relay_key }}" >> $GITHUB_ENV
-          echo "NEW_API_SERVER=${{ github.event.inputs.api_server }}" >> $GITHUB_ENV
-          echo "CUSTOM_TXT_BASE64=${{ github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
-          echo "APPLY_PATCHES=${{ github.event.inputs.apply_patches }}" >> $GITHUB_ENV
+          echo "NEW_APP_NAME=${{ github.event.client_payload.client_name || github.event.inputs.client_name }}" >> $GITHUB_ENV
+          echo "NEW_EXE_NAME=${{ github.event.client_payload.client_exe_name || github.event.inputs.client_exe_name }}" >> $GITHUB_ENV
+          echo "NEW_PREFIX=${{ github.event.client_payload.client_prefix || github.event.inputs.client_prefix }}" >> $GITHUB_ENV
+          echo "NEW_IP=${{ github.event.client_payload.relay_host || github.event.inputs.relay_host }}" >> $GITHUB_ENV
+          echo "NEW_PUB_KEY=${{ github.event.client_payload.relay_key || github.event.inputs.relay_key }}" >> $GITHUB_ENV
+          echo "NEW_API_SERVER=${{ github.event.client_payload.api_server || github.event.inputs.api_server }}" >> $GITHUB_ENV
+          echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 || github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
+          echo "APPLY_PATCHES=${{ github.event.client_payload.apply_patches || github.event.inputs.apply_patches }}" >> $GITHUB_ENV
 
       - name: Run Customize Script and Apply Patches
         run: |
@@ -200,5 +202,5 @@ jobs:
       - name: Upload Finished Custom Client Zip
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ github.event.inputs.client_guid }}-windows
+          name: ${{ github.event.client_payload.client_guid || github.event.inputs.client_guid }}-windows
           path: ./custom_client.zip
