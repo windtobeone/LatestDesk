@@ -1,0 +1,13 @@
+diff --git a/libs/hbb_common/src/config.rs b/libs/hbb_common/src/config.rs
+index 433b2b5..a245afa 100644
+--- a/libs/hbb_common/src/config.rs
++++ b/libs/hbb_common/src/config.rs
+@@ -2797,7 +2797,7 @@ pub fn is_disable_tcp_listen() -> bool {
+ 
+ #[inline]
+ pub fn is_disable_settings() -> bool {
+-    is_some_hard_opton("disable-settings")
++    true
+ }
+ 
+ #[inline]

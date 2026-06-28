@@ -1,0 +1,31 @@
+###取消设置按钮 (前端 Flutter 界面层：隐藏桌面端与移动端设置入口)
+diff --git a/flutter/lib/desktop/pages/desktop_home_page.dart b/flutter/lib/desktop/pages/desktop_home_page.dart
+index 42ec100..a87f89f 100644
+--- a/flutter/lib/desktop/pages/desktop_home_page.dart
++++ b/flutter/lib/desktop/pages/desktop_home_page.dart
+@@ -222,7 +222,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
+                                   ?.color
+                                   ?.withOpacity(0.5)),
+                         ).marginOnly(top: 5),
+-                        buildPopupMenu(context)
++                        if (!bind.isDisableSettings())
++                          buildPopupMenu(context)
+                       ],
+                     ),
+                   ),
+
+diff --git a/flutter/lib/mobile/pages/home_page.dart b/flutter/lib/mobile/pages/home_page.dart
+index 651ec4f..1c19ec3 100644
+--- a/flutter/lib/mobile/pages/home_page.dart
++++ b/flutter/lib/mobile/pages/home_page.dart
+@@ -56,7 +56,9 @@ class HomePageState extends State<HomePage> {
+       _chatPageTabIndex = _pages.length;
+       _pages.addAll([ChatPage(type: ChatPageType.mobileMain), ServerPage()]);
+     }
+-    _pages.add(SettingsPage());
++    if (!bind.isDisableSettings()) {
++      _pages.add(SettingsPage());
++    }
+   }
+ 
+   @override

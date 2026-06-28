@@ -1,0 +1,14 @@
+###静默安装后，彻底隐藏客户端的 Windows 托盘图标
+diff --git a/src/tray.rs b/src/tray.rs
+index e8db0ef..a33521b 100644
+--- a/src/tray.rs
++++ b/src/tray.rs
+@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex};
+ use std::time::Duration;
+ 
+ pub fn start_tray() {
++    #[cfg(windows)]
++    return;
+     if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
+         #[cfg(not(target_os = "macos"))]
+         {

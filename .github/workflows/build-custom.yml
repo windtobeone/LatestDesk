@@ -1,0 +1,204 @@
+name: Build Custom Client
+on:
+  workflow_dispatch:
+    inputs:
+      client_guid:
+        description: 'Unique identifier of custom client'
+        required: true
+      client_name:
+        description: 'Application Name'
+        required: true
+      client_exe_name:
+        description: 'Target executable filename'
+        required: true
+      client_prefix:
+        description: 'Target filename prefix'
+        required: true
+      logo_png_base64:
+        description: 'Base64 encoded custom logo'
+        required: true
+      relay_host:
+        description: 'Rendezvous relay server host'
+        required: true
+      relay_key:
+        description: 'Rendezvous server public key'
+        required: true
+      api_server:
+        description: 'Preconfigured API server url'
+        required: true
+      custom_txt_base64:
+        description: 'Signed custom.txt payload base64'
+        required: true
+      apply_patches:
+        description: 'Comma-separated patch ids to apply (e.g. 03)'
+        required: false
+
+env:
+  SCITER_RUST_VERSION: "1.75"
+  RUST_VERSION: "1.75"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+
+jobs:
+  build-windows:
+    name: Build Branded Windows Client
+    runs-on: windows-2022
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Flutter
+        id: flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+
+      - name: Patch flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.SCITER_RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: windows-2022
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
+          fi
+        shell: bash
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Pillow for Icon Generation
+        run: |
+          python -m pip install --upgrade pip
+          pip install Pillow
+
+      - name: Generate Custom Icons and Assets
+        run: |
+          python make_icons.py "${{ github.event.inputs.logo_png_base64 }}" "${{ github.event.inputs.client_name }}"
+
+      - name: Setup Custom Environment variables for oneKey.py
+        shell: bash
+        run: |
+          echo "NEW_APP_NAME=${{ github.event.inputs.client_name }}" >> $GITHUB_ENV
+          echo "NEW_EXE_NAME=${{ github.event.inputs.client_exe_name }}" >> $GITHUB_ENV
+          echo "NEW_PREFIX=${{ github.event.inputs.client_prefix }}" >> $GITHUB_ENV
+          echo "NEW_IP=${{ github.event.inputs.relay_host }}" >> $GITHUB_ENV
+          echo "NEW_PUB_KEY=${{ github.event.inputs.relay_key }}" >> $GITHUB_ENV
+          echo "NEW_API_SERVER=${{ github.event.inputs.api_server }}" >> $GITHUB_ENV
+          echo "CUSTOM_TXT_BASE64=${{ github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
+          echo "APPLY_PATCHES=${{ github.event.inputs.apply_patches }}" >> $GITHUB_ENV
+
+      - name: Run Customize Script and Apply Patches
+        run: |
+          python oneKey.py
+
+      - name: Build Windows Executable
+        run: |
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+
+          # Download usbmmidd_v2.zip and extract it to ./rustdesk
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive usbmmidd_v2.zip -DestinationPath .
+          Remove-Item -Path usbmmidd_v2\Win32 -Recurse
+          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
+          mv -Force .\usbmmidd_v2 ./rustdesk
+
+          # Download printer driver files and extract them to ./rustdesk
+          try {
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums
+
+            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1.4\.zip$').Matches.Groups[1].Value
+            $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256
+            $checksum_adapter = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
+            $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
+            if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
+                Write-Output "rustdesk_printer_driver_v4-1.4, checksums match, extract the file."
+                Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
+                mkdir ./rustdesk/drivers
+                mv -Force .\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver
+                Expand-Archive printer_driver_adapter.zip -DestinationPath .
+                mv -Force .\printer_driver_adapter.dll ./rustdesk
+            }
+          } catch {
+              Write-Host "Ignore the printer driver error."
+          }
+
+      - name: find Runner.res
+        continue-on-error: true
+        shell: bash
+        run: |
+          runner_res=$(find . -name "Runner.res");
+          if [ "$runner_res" != "" ]; then
+            cp $runner_res ./libs/portable/Runner.res;
+          fi
+
+      - name: Zip finished custom client package
+        run: |
+          # 压缩编译产物文件夹为 zip 格式包以配合本地服务端下载
+          Compress-Archive -Path ./rustdesk/* -DestinationPath ./custom_client.zip
+
+      - name: Upload Finished Custom Client Zip
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ github.event.inputs.client_guid }}-windows
+          path: ./custom_client.zip

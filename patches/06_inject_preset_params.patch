@@ -1,0 +1,17 @@
+##注入预设参数 (隐藏弱密码警告 ＆ 禁止用户修改固定密码)
+diff --git a/libs/hbb_common/src/config.rs b/libs/hbb_common/src/config.rs
+index 433b2b5..b82934c 100644
+--- a/libs/hbb_common/src/config.rs
++++ b/libs/hbb_common/src/config.rs
+@@ -80,7 +80,10 @@ lazy_static::lazy_static! {
+     pub static ref DEFAULT_LOCAL_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+     pub static ref OVERWRITE_LOCAL_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+     pub static ref HARD_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+-    pub static ref BUILTIN_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
++    pub static ref BUILTIN_SETTINGS: RwLock<HashMap<String, String>> = RwLock::new(HashMap::from([
++        ("remove-preset-password-warning".to_owned(), "Y".to_owned()),
++        ("disable-change-permanent-password".to_owned(), "Y".to_owned()),
++    ]));
+ }
+ 
+ #[cfg(target_os = "android")]

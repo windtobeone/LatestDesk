@@ -1,0 +1,43 @@
+###程序双击改为全自动静默安装 (跳过快捷方式创建与成功弹窗)
+diff --git a/src/core_main.rs b/src/core_main.rs
+index 2bd6c11..721ef92 100644
+--- a/src/core_main.rs
++++ b/src/core_main.rs
+@@ -119,10 +119,10 @@ pub fn core_main() -> Option<Vec<String>> {
+     if _is_flutter_invoke_new_connection {
+         return core_main_invoke_new_connection(std::env::args());
+     }
+-    let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
++    let click_setup = cfg!(windows) && args.is_empty() && !crate::platform::is_installed();
+     if click_setup && !config::is_disable_installation() {
+-        args.push("--install".to_owned());
+-        flutter_args.push("--install".to_string());
++        args.push("--silent-install".to_owned());
++        flutter_args.push("--silent-install".to_string());
+     }
+     if args.contains(&"--noinstall".to_string()) {
+         args.clear();
+@@ -265,22 +265,8 @@ pub fn core_main() -> Option<Vec<String>> {
+                 #[cfg(not(windows))]
+                 let options = "desktopicon startmenu";
+                 #[cfg(windows)]
+-                let options = "desktopicon startmenu printer";
++                let options = "";
+                 let res = platform::install_me(options, "".to_owned(), true, args.len() > 1);
+-                let text = match res {
+-                    Ok(_) => translate("Installation Successful!".to_string()),
+-                    Err(err) => {
+-                        println!("Failed with error: {err}");
+-                        translate("Installation failed!".to_string())
+-                    }
+-                };
+-                Toast::new(Toast::POWERSHELL_APP_ID)
+-                    .title(&config::APP_NAME.read().unwrap())
+-                    .text1(&text)
+-                    .sound(Some(Sound::Default))
+-                    .duration(Duration::Short)
+-                    .show()
+-                    .ok();
+                 return None;
+             } else if args[0] == "--uninstall-cert" {
+                 #[cfg(windows)]
