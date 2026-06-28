@@ -64,13 +64,11 @@ jobs:
         with:
           version: ${{ env.LLVM_VERSION }}
 
-      - name: Install Flutter
-        id: flutter
-        uses: subosito/flutter-action@v2
+      - name: Install flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225  # v2.12.0; https://github.com/subosito/flutter-action/issues/277
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          architecture: x64
 
       - name: Replace engine with rustdesk custom flutter engine
         run: |
