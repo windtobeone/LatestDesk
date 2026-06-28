@@ -1,6 +1,13 @@
 import os
 import sys
 import base64
+
+# Force stdout and stderr to use UTF-8 encoding to prevent UnicodeEncodeError on Windows CP1252 runner
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 from PIL import Image, ImageDraw, ImageFont
 
 def colorize_to_solid(img, color=(255, 255, 255, 255)):
