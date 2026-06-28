@@ -1,40 +1,32 @@
 import os
 import sys
 import base64
-
-# Force stdout and stderr to use UTF-8 encoding to prevent UnicodeEncodeError on Windows CP1252 runner
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8')
-
 from PIL import Image, ImageDraw, ImageFont
 
 def colorize_to_solid(img, color=(255, 255, 255, 255)):
-    """将一个透明 PNG 图像所有非透明区域着色为纯色"""
+    # Colorize non-transparent areas of a transparent PNG to solid color
     if img.mode != 'RGBA':
         img = img.convert('RGBA')
     r, g, b, a = img.split()
     solid_img = Image.new("RGBA", img.size, color)
-    # 使用原始图像的 Alpha 通道进行遮罩混合
     return Image.composite(solid_img, Image.new("RGBA", img.size, (0, 0, 0, 0)), a)
 
 def generate_icons(logo_base64_str, app_name, target_dir="."):
-    # 💡 支持从文件中读取 base64 字符串以规避 Windows 命令行长度限制 (Windows cmd limit is 8191 chars)
+    # Read from file if the path exists to bypass Windows command length limits
     if os.path.exists(logo_base64_str):
-        print(f"📖 Reading base64 string from file: {logo_base64_str}")
+        print(f"Info: Reading base64 string from file: {logo_base64_str}")
         try:
             with open(logo_base64_str, "r", encoding="utf-8") as f:
                 logo_base64_str = f.read().strip()
         except Exception as e:
-            print(f"⚠️ Failed to read base64 file: {e}")
+            print(f"Error: Failed to read base64 file: {e}")
 
-    # 💡 安全防护：如果未传入自定义图标/Logo，则保留官方默认图标并安全退出
+    # Safety check for empty or blank logo input
     if not logo_base64_str or not logo_base64_str.strip():
-        print("⏭️ No custom logo or icon base64 provided. Keeping official/default RustDesk icons.")
+        print("Skip: No custom logo or icon base64 provided. Keeping default icons.")
         return
 
-    # 1. 解码 Base64 到临时 PNG 文件
+    # 1. Decode Base64 to temporary PNG file
     logo_data = base64.b64decode(logo_base64_str)
     temp_png = os.path.join(target_dir, "temp_logo_source.png")
     with open(temp_png, "wb") as f:
@@ -44,88 +36,73 @@ def generate_icons(logo_base64_str, app_name, target_dir="."):
     if img.mode != 'RGBA':
         img = img.convert('RGBA')
 
-    print(f"🚀 基于您的 logo.txt 经验，开始执行全平台深度图标定制部署 (应用名称: {app_name})...")
+    print(f"Info: Starting multi-platform icon generation (App Name: {app_name})...")
 
     # ==========================================
-    # 1. 通用打包原图部署与 macOS 启动器母图
+    # 1. General asset templates and macOS launcher master
     # ==========================================
     res_dir = os.path.join(target_dir, "res")
     if os.path.exists(res_dir):
-        # 部署通用打包图
         img.save(os.path.join(res_dir, "icon.png"), "PNG")
         
-        # 部署 macOS 启动器源图 (缩小至 85% 并居中，符合苹果圆形图标留白规范)
         mac_icon_large = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
         resized_85 = img.resize((870, 870), Image.Resampling.LANCZOS)
         mac_icon_large.paste(resized_85, (77, 77))
         mac_icon_large.save(os.path.join(res_dir, "mac-icon.png"), "PNG")
-        print("✅ 通用打包母图及 macOS 启动器源图部署完成")
+        print("Success: Generated general asset templates and macOS launcher master icons.")
     else:
-        print(f"⏭️  未找到 res 目录，跳过通用打包母图生成")
+        print("Skip: res directory not found, skipping master template generation.")
 
     # ==========================================
-    # 2. Windows 图标与托盘图标 (.ico)
+    # 2. Windows app and tray icons (.ico)
     # ==========================================
     win_res_dir = os.path.join(target_dir, "flutter", "windows", "runner", "resources")
     if os.path.exists(win_res_dir):
-        # 生成 Windows 主程序图标
         img.save(os.path.join(win_res_dir, "app_icon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (256, 256)])
         
-        # 如果 res 目录存在，生成 Windows 专属 ico 备用
         if os.path.exists(res_dir):
             img.save(os.path.join(res_dir, "icon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (256, 256)])
-            # 托盘图标 (一般为 16x16, 32x32)
             img.save(os.path.join(res_dir, "tray-icon.ico"), format="ICO", sizes=[(16, 16), (32, 32)])
-        print("✅ Windows 主程序图标与托盘图标生成完成")
+        print("Success: Generated Windows app and tray icons.")
     else:
-        print(f"⏭️  未找到 Windows 资源目录，跳过 Windows 图标生成")
+        print("Skip: Windows runner resource directory not found.")
 
     # ==========================================
-    # 3. macOS 托盘黑白双色图标部署
+    # 3. macOS Tray light and dark icons
     # ==========================================
     if os.path.exists(res_dir):
-        # 黑暗模式托盘图标 (纯白)
         mac_tray_dark = colorize_to_solid(img, (255, 255, 255, 255)).resize((32, 32), Image.Resampling.LANCZOS)
         mac_tray_dark.save(os.path.join(res_dir, "mac-tray-dark-x2.png"), "PNG")
         
-        # 明亮模式托盘图标 (纯黑)
         mac_tray_light = colorize_to_solid(img, (0, 0, 0, 255)).resize((32, 32), Image.Resampling.LANCZOS)
         mac_tray_light.save(os.path.join(res_dir, "mac-tray-light-x2.png"), "PNG")
-        print("✅ macOS 托盘黑白双色图标生成完成")
+        print("Success: Generated macOS tray icons (light and dark).")
 
     # ==========================================
-    # 4. Linux 多分辨率系统图标部署
+    # 4. Linux multi-size app icons
     # ==========================================
     if os.path.exists(res_dir):
         img.resize((32, 32), Image.Resampling.LANCZOS).save(os.path.join(res_dir, "32x32.png"), "PNG")
         img.resize((64, 64), Image.Resampling.LANCZOS).save(os.path.join(res_dir, "64x64.png"), "PNG")
         img.resize((128, 128), Image.Resampling.LANCZOS).save(os.path.join(res_dir, "128x128.png"), "PNG")
-        # 128x128@2x 实际为 256x256
         img.resize((256, 256), Image.Resampling.LANCZOS).save(os.path.join(res_dir, "128x128@2x.png"), "PNG")
-        print("✅ Linux 安装包多尺寸系统图标生成完成")
+        print("Success: Generated Linux multi-size app icons.")
 
     # ==========================================
-    # 5. 客户端内部横版 UI Logo 生成 (非常关键，去官方字样)
+    # 5. Synthesize internal horizontal UI Logo
     # ==========================================
     assets_dir = os.path.join(target_dir, "flutter", "assets")
     if os.path.exists(assets_dir):
-        # 1. 部署矢量 icon.svg
-        # (注：由于 base64 输入为 PNG，此处复制一个备份或跳过 svg。如果有 svg 输入则复制 svg)
-        
-        # 2. 合成 300x60 横版 UI 标志 (包含图标 + 文字 AppName)
         logo_canvas = Image.new("RGBA", (300, 60), (0, 0, 0, 0))
-        # 缩放图标高度至 42 像素
         icon_h = 42
         icon_w = int(img.width * (icon_h / img.height))
         resized_ui_icon = img.resize((icon_w, icon_h), Image.Resampling.LANCZOS)
-        # 贴在左侧 (x=15, y=9)
         logo_canvas.paste(resized_ui_icon, (15, 9), resized_ui_icon)
         
-        # 在右侧绘制应用名称 (x=72)
         draw = ImageDraw.Draw(logo_canvas)
         font_size = 20
         font = None
-        # 尝试加载中文字体，如果失败则使用默认字体
+        # Try loading system font, fallback to default font if failed
         font_paths = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
@@ -141,15 +118,14 @@ def generate_icons(logo_base64_str, app_name, target_dir="."):
         if font is None:
             font = ImageFont.load_default()
             
-        # 居中对齐绘制文本
         draw.text((72, 16), app_name, fill=(51, 51, 51, 255), font=font)
         logo_canvas.save(os.path.join(assets_dir, "logo.png"), "PNG")
-        print("✅ 客户端内部横版 UI Logo (包含 App 名称文本) 合成成功")
+        print("Success: Synthesized internal horizontal UI Logo with App name text.")
     else:
-        print(f"⏭️  未找到 flutter/assets 目录，跳过横版 UI Logo 生成")
+        print("Skip: flutter/assets directory not found.")
 
     # ==========================================
-    # 6. Android 图标及状态栏纯白通知图标部署
+    # 6. Android launcher and notification icons
     # ==========================================
     android_sizes = {
         "mipmap-mdpi": (48, "24x24"),
@@ -164,22 +140,20 @@ def generate_icons(logo_base64_str, app_name, target_dir="."):
             folder_path = os.path.join(android_base_path, folder)
             os.makedirs(folder_path, exist_ok=True)
             
-            # 1. 缩放生成桌面启动器图标
             resized_launcher = img.resize((launcher_size, launcher_size), Image.Resampling.LANCZOS)
             resized_launcher.save(os.path.join(folder_path, "ic_launcher.png"), "PNG")
             resized_launcher.save(os.path.join(folder_path, "ic_launcher_round.png"), "PNG")
             
-            # 2. 生成 Android 状态栏纯白通知图标 (来自 logo.txt 经验)
             stat_w, stat_h = map(int, stat_size_str.split('x'))
             white_stat_icon = colorize_to_solid(img, (255, 255, 255, 255)).resize((stat_w, stat_h), Image.Resampling.LANCZOS)
             white_stat_icon.save(os.path.join(folder_path, "ic_stat_logo.png"), "PNG")
             
-        print("✅ Android 安装包桌面图标与纯白状态栏通知图标部署完成")
+        print("Success: Generated Android launcher and status notification icons.")
     else:
-        print(f"⏭️  未找到 Android 目录，跳过 Android 图标部署")
+        print("Skip: Android res directory not found.")
 
     # ==========================================
-    # 7. macOS AppIconset 尺寸包生成
+    # 7. macOS AppIconset package generation
     # ==========================================
     mac_iconset_path = os.path.join(target_dir, "flutter", "macos", "Runner", "Assets.xcassets", "AppIcon.appiconset")
     if os.path.exists(mac_iconset_path):
@@ -194,14 +168,14 @@ def generate_icons(logo_base64_str, app_name, target_dir="."):
         ]
         for filename, size in mac_sizes:
             img.resize((size, size), Image.Resampling.LANCZOS).save(os.path.join(mac_iconset_path, filename), "PNG")
-        print("✅ macOS AppIconset 尺寸包生成完成")
+        print("Success: Generated macOS AppIconset package.")
     else:
-        print(f"⏭️  未找到 macOS 资源目录，跳过 macOS 尺寸包生成")
+        print("Skip: macOS Assets.xcassets directory not found.")
 
-    # 清理临时文件
+    # Clean up temporary file
     if os.path.exists(temp_png):
         os.remove(temp_png)
-    print("🎉 [ALL DONE] 所有平台高级定制化图标资源已部署完毕！")
+    print("All multi-platform customized icon assets generated successfully!")
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
