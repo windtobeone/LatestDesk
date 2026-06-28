@@ -13,6 +13,11 @@ def colorize_to_solid(img, color=(255, 255, 255, 255)):
     return Image.composite(solid_img, Image.new("RGBA", img.size, (0, 0, 0, 0)), a)
 
 def generate_icons(logo_base64_str, app_name, target_dir="."):
+    # 💡 安全防护：如果未传入自定义图标/Logo，则保留官方默认图标并安全退出
+    if not logo_base64_str or not logo_base64_str.strip():
+        print("⏭️ No custom logo or icon base64 provided. Keeping official/default RustDesk icons.")
+        return
+
     # 1. 解码 Base64 到临时 PNG 文件
     logo_data = base64.b64decode(logo_base64_str)
     temp_png = os.path.join(target_dir, "temp_logo_source.png")
