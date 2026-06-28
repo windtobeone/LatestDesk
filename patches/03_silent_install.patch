@@ -17,7 +17,10 @@ index 2bd6c11..721ef92 100644
      }
      if args.contains(&"--noinstall".to_string()) {
          args.clear();
-@@ -265,22 +265,8 @@ pub fn core_main() -> Option<Vec<String>> {
+@@ -261,22 +261,8 @@ pub fn core_main() -> Option<Vec<String>> {
+                 if config::is_disable_installation() {
+                     return None;
+                 }
                  #[cfg(not(windows))]
                  let options = "desktopicon startmenu";
                  #[cfg(windows)]
@@ -41,3 +44,5 @@ index 2bd6c11..721ef92 100644
                  return None;
              } else if args[0] == "--uninstall-cert" {
                  #[cfg(windows)]
+                 hbb_common::allow_err!(crate::platform::windows::uninstall_cert());
+                 return None;
