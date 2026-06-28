@@ -36,11 +36,13 @@ on:
     types: [build-custom-client]
 
 env:
-  SCITER_RUST_VERSION: "1.75"
-  RUST_VERSION: "1.75"
+  FLUTTER_RUST_VERSION: "1.80.1"
+  SCITER_RUST_VERSION: "1.75.0"
+  RUST_VERSION: "1.80.1"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.5"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+
 
 jobs:
   build-windows:
@@ -85,12 +87,19 @@ jobs:
           cd $(dirname $(dirname $(which flutter)))
           [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
 
-      - name: Install Rust toolchain
+      - name: Install Rust 1.80.1
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: ${{ env.SCITER_RUST_VERSION }}
+          toolchain: ${{ env.FLUTTER_RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
           components: "rustfmt"
+
+      - name: Install Rust 1.75.0
+        run: |
+          rustup toolchain install ${{ env.SCITER_RUST_VERSION }}-x86_64-pc-windows-msvc
+          rustup target add x86_64-pc-windows-msvc --toolchain ${{ env.SCITER_RUST_VERSION }}
+        shell: bash
+
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -150,19 +159,30 @@ jobs:
         run: |
           python oneKey.py
 
-      - name: Build Windows Executable
+      - name: Build Windows Flutter Executable
         run: |
-          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
-          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          # Use Rust 1.80.1 for the Flutter build (so it matches the pre-generated bridge files)
+          rustup default ${{ env.FLUTTER_RUST_VERSION }}-x86_64-pc-windows-msvc
 
-          # Download usbmmidd_v2.zip and extract it to ./rustdesk
+          # 1. Build Windows Flutter Executable (64-bit modern UI)
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+
+          # 2. Create the final output structure
+          mkdir ./finished_client
+          mkdir ./finished_client/Flutter_Win10_x64
+          mkdir ./finished_client/Sciter_Win7_Legacy
+
+          # Move compiled Flutter release files
+          mv ./flutter/build/windows/x64/runner/Release/* ./finished_client/Flutter_Win10_x64/
+
+          # Download usbmmidd_v2.zip and extract it to ./finished_client/Flutter_Win10_x64
           Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
           Expand-Archive usbmmidd_v2.zip -DestinationPath .
           Remove-Item -Path usbmmidd_v2\Win32 -Recurse
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
-          mv -Force .\usbmmidd_v2 ./rustdesk
+          mv -Force .\usbmmidd_v2 ./finished_client/Flutter_Win10_x64/
 
-          # Download printer driver files and extract them to ./rustdesk
+          # Download printer driver files and extract them to ./finished_client/Flutter_Win10_x64
           try {
             Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
             Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
@@ -175,28 +195,47 @@ jobs:
             if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
                 Write-Output "rustdesk_printer_driver_v4-1.4, checksums match, extract the file."
                 Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
-                mkdir ./rustdesk/drivers
-                mv -Force .\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver
+                mkdir ./finished_client/Flutter_Win10_x64/drivers
+                mv -Force .\rustdesk_printer_driver_v4-1.4 ./finished_client/Flutter_Win10_x64/drivers/RustDeskPrinterDriver
                 Expand-Archive printer_driver_adapter.zip -DestinationPath .
-                mv -Force .\printer_driver_adapter.dll ./rustdesk
+                mv -Force .\printer_driver_adapter.dll ./finished_client/Flutter_Win10_x64/
             }
           } catch {
               Write-Host "Ignore the printer driver error."
           }
 
-      - name: find Runner.res
+      - name: Find and Propagate Runner.res
         continue-on-error: true
         shell: bash
         run: |
+          # Copy the generated resource file containing icons to libs/portable
           runner_res=$(find . -name "Runner.res");
           if [ "$runner_res" != "" ]; then
             cp $runner_res ./libs/portable/Runner.res;
           fi
 
+      - name: Build Windows Sciter Executable
+        run: |
+          # Use Rust 1.75.0 for the Sciter build (Win7 compatible, no bridge compilation needed)
+          rustup default ${{ env.SCITER_RUST_VERSION }}-x86_64-pc-windows-msvc
+
+          # 3. Build Windows Sciter Executable
+          python3 .\build.py --portable --hwcodec --vram
+
+          # Move and rename the Sciter portable exe to matched branding
+          $sciter_exe = Get-ChildItem -Filter "rustdesk-*-win7-install.exe" | Select-Object -First 1
+          if ($sciter_exe) {
+              mv $sciter_exe.FullName "./finished_client/Sciter_Win7_Legacy/${env:NEW_APP_NAME}-win7-legacy.exe"
+          } else {
+              Write-Error "Sciter build failed to output executable!"
+              exit 1
+          }
+
       - name: Zip finished custom client package
         run: |
-          # 压缩编译产物文件夹为 zip 格式包以配合本地服务端下载
-          Compress-Archive -Path ./rustdesk/* -DestinationPath ./custom_client.zip
+          # Compress both versions into custom_client.zip
+          Compress-Archive -Path ./finished_client/* -DestinationPath ./custom_client.zip
+
 
       - name: Upload Finished Custom Client Zip
         uses: actions/upload-artifact@v4
