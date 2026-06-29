@@ -48,9 +48,18 @@ jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
 
+  build-RustDeskTempTopMostWindow:
+    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
+    with:
+      upload-artifact: true
+      target: windows-2022
+      configuration: Release
+      platform: x64
+      target_version: Windows10
+
   build-windows:
     name: Build Branded Windows Client
-    needs: generate-bridge
+    needs: [generate-bridge, build-RustDeskTempTopMostWindow]
     runs-on: windows-2022
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -204,6 +213,12 @@ jobs:
           } catch {
               Write-Host "Ignore the printer driver error."
           }
+
+      - name: Download RustDeskTempTopMostWindow artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: topmostwindow-artifacts
+          path: "./finished_client/Flutter_Win10_x64"
 
       - name: Find and Propagate Runner.res
         continue-on-error: true
