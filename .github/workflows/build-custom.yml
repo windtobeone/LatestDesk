@@ -452,11 +452,11 @@ jobs:
           cargo update -p sciter-rs --precise 674e07d3066ca9a92ced3816203ab6b652629d1e
 
           # 3. Build the Sciter 32-bit release binary
-          cargo build --locked --release --target i686-pc-windows-msvc --features inline,vram,hwcodec --bins
+          cargo build --locked --release --features inline,vram,hwcodec --bins
 
           # 4. Prepare the temporary Sciter release directory
           mkdir -p ./Release_Sciter_x86
-          mv ./target/i686-pc-windows-msvc/release/rustdesk.exe ./Release_Sciter_x86/rustdesk.exe
+          mv ./target/release/rustdesk.exe ./Release_Sciter_x86/rustdesk.exe
 
           # 5. Download 32-bit sciter.dll (critical for legacy Windows)
           curl -LJ -o ./Release_Sciter_x86/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
@@ -464,19 +464,19 @@ jobs:
           # 6. Download and extract usbmmidd_v2 driver into the release folder
           curl -LJ -o ./usbmmidd_v2_sciter.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
           unzip ./usbmmidd_v2_sciter.zip
-          rm -rf ./usbmmidd_v2/Win32 ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat
+          rm -rf ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat
           mv ./usbmmidd_v2 ./Release_Sciter_x86/
 
           # 7. Generate the self-extracted portable installer (compiled as 32-bit)
           sed -i '/dpiAware/d' res/manifest.xml
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../Release_Sciter_x86/ -o . -e ../../Release_Sciter_x86/rustdesk.exe -t i686-pc-windows-msvc
+          python3 ./generate.py -f ../../Release_Sciter_x86/ -o . -e ../../Release_Sciter_x86/rustdesk.exe
           popd
 
           # 8. Move and rename the final portable installer
           mkdir -p ./sciter_x86_out
-          mv ./target/i686-pc-windows-msvc/release/rustdesk-portable-packer.exe ./sciter_x86_out/${NEW_APP_NAME}-win7-legacy-x86.exe
+          mv ./target/release/rustdesk-portable-packer.exe ./sciter_x86_out/${NEW_APP_NAME}-win7-legacy-x86.exe
 
       - name: Upload Sciter x86 Client Temp Artifact
         uses: actions/upload-artifact@v4
