@@ -371,8 +371,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2.0.9
+      - name: Install LLVM and Clang (32-bit)
+        uses: rustdesk-org/install-llvm-action-32bit@6aa7d9ad3df84dff01cd4596dd0fc880a7f47fce
         with:
           version: ${{ env.LLVM_VERSION }}
 
