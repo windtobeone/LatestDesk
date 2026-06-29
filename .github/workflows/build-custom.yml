@@ -223,7 +223,7 @@ jobs:
           python3 ./generate.py -f ../../Release_Flutter/ -o . -e ../../Release_Flutter/${NEW_EXE_NAME}
           popd
           mkdir -p ./flutter_out
-          mv ./target/release/rustdesk-portable-packer.exe ./flutter_out/${NEW_APP_NAME}.exe
+          mv ./target/release/rustdesk-portable-packer.exe ./flutter_out/${NEW_EXE_NAME}
 
       - name: Upload Flutter Client Temp Artifact
         uses: actions/upload-artifact@v4
@@ -349,7 +349,7 @@ jobs:
 
           # 7. Move and rename the final portable installer
           mkdir -p ./sciter_x64_out
-          mv ./target/release/rustdesk-portable-packer.exe ./sciter_x64_out/${NEW_APP_NAME}-win7-legacy-x64.exe
+          mv ./target/release/rustdesk-portable-packer.exe ./sciter_x64_out/${NEW_EXE_NAME%.*}-win7-legacy-x64.exe
 
       - name: Upload Sciter x64 Client Temp Artifact
         uses: actions/upload-artifact@v4
@@ -479,7 +479,7 @@ jobs:
 
           # 8. Move and rename the final portable installer
           mkdir -p ./sciter_x86_out
-          mv ./target/release/rustdesk-portable-packer.exe ./sciter_x86_out/${NEW_APP_NAME}-win7-legacy-x86.exe
+          mv ./target/release/rustdesk-portable-packer.exe ./sciter_x86_out/${NEW_EXE_NAME%.*}-win7-legacy-x86.exe
 
       - name: Upload Sciter x86 Client Temp Artifact
         uses: actions/upload-artifact@v4

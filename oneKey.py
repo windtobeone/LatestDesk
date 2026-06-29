@@ -5,14 +5,22 @@ import subprocess
 # ==========================================
 # Part 1: Global customization parameters (Read from GitHub Actions environment)
 # ==========================================
+from urllib.parse import urlparse
+
 NEW_APP_NAME = os.getenv("NEW_APP_NAME", "QQanDesk")
 NEW_EXE_NAME = os.getenv("NEW_EXE_NAME", "QQnDesk.exe")
 NEW_PREFIX   = os.getenv("NEW_PREFIX", "QQndesk")
-NEW_DOMAIN   = os.getenv("NEW_DOMAIN", "wind.ex.com")
-NEW_URL      = os.getenv("NEW_URL", f"https://{NEW_DOMAIN}")
 NEW_EMAIL    = os.getenv("NEW_EMAIL", "wind.ex@qq.com")
 NEW_IP       = os.getenv("NEW_IP", "192.168.201.129")
 NEW_PUB_KEY  = os.getenv("NEW_PUB_KEY", "4Z9UuzUy2tVgRWqyPJ84813O7AgP0yhzg9wE3g7Kk9I=")
+
+NEW_API_SERVER = os.getenv("NEW_API_SERVER", "http://192.168.201.129")
+NEW_URL      = os.getenv("NEW_URL", NEW_API_SERVER)
+
+parsed_url = urlparse(NEW_API_SERVER)
+NEW_DOMAIN = os.getenv("NEW_DOMAIN", parsed_url.hostname or "192.168.201.129")
+
+NEW_EXE_BASE_NAME = NEW_EXE_NAME.replace(".exe", "")
 
 # ==========================================
 # Extracted multi-line code blocks for replacement
@@ -105,13 +113,13 @@ REPLACEMENTS = {
         ("'rustdesk.com'", f"'{NEW_DOMAIN}'")
     ],
     "flutter/windows/CMakeLists.txt": [
-        ('project(rustdesk LANGUAGES CXX)', f'project({NEW_APP_NAME} LANGUAGES CXX)'),
-        ('set(BINARY_NAME "rustdesk")', f'set(BINARY_NAME "{NEW_APP_NAME}")')
+        ('project(rustdesk LANGUAGES CXX)', f'project({NEW_EXE_BASE_NAME} LANGUAGES CXX)'),
+        ('set(BINARY_NAME "rustdesk")', f'set(BINARY_NAME "{NEW_EXE_BASE_NAME}")')
     ],
     "flutter/windows/runner/Runner.rc": [
         ('"CompanyName", "Purslane Ltd"', f'"CompanyName", "{NEW_DOMAIN}"'),
         ('"FileDescription", "RustDesk Remote Desktop"', f'"FileDescription", "{NEW_APP_NAME} Remote Desktop"'),
-        ('"InternalName", "rustdesk"', f'"InternalName", "{NEW_APP_NAME}"'),
+        ('"InternalName", "rustdesk"', f'"InternalName", "{NEW_EXE_BASE_NAME}"'),
         ('"LegalCopyright", "Copyright © 2025 Purslane Ltd. All rights reserved."', f'"LegalCopyright", "Copyright © 2025 {NEW_DOMAIN}. All rights reserved."'),
         ('"OriginalFilename", "rustdesk.exe"', f'"OriginalFilename", "{NEW_EXE_NAME}"'),
         ('"ProductName", "RustDesk"', f'"ProductName", "{NEW_APP_NAME}"')
