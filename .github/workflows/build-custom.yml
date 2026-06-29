@@ -217,9 +217,10 @@ jobs:
         shell: bash
         run: |
           sed -i '/dpiAware/d' res/manifest.xml
+          cp src/custom.txt Release_Flutter/custom.txt || true
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../Release_Flutter/ -o . -e ../../Release_Flutter/rustdesk.exe
+          python3 ./generate.py -f ../../Release_Flutter/ -o . -e ../../Release_Flutter/${NEW_EXE_NAME}
           popd
           mkdir -p ./flutter_out
           mv ./target/release/rustdesk-portable-packer.exe ./flutter_out/${NEW_APP_NAME}.exe
@@ -340,6 +341,7 @@ jobs:
 
           # 6. Generate the self-extracted portable installer
           sed -i '/dpiAware/d' res/manifest.xml
+          cp src/custom.txt Release_Sciter_x64/custom.txt || true
           pushd ./libs/portable
           pip3 install -r requirements.txt
           python3 ./generate.py -f ../../Release_Sciter_x64/ -o . -e ../../Release_Sciter_x64/rustdesk.exe
@@ -469,6 +471,7 @@ jobs:
 
           # 7. Generate the self-extracted portable installer (compiled as 32-bit)
           sed -i '/dpiAware/d' res/manifest.xml
+          cp src/custom.txt Release_Sciter_x86/custom.txt || true
           pushd ./libs/portable
           pip3 install -r requirements.txt
           python3 ./generate.py -f ../../Release_Sciter_x86/ -o . -e ../../Release_Sciter_x86/rustdesk.exe
