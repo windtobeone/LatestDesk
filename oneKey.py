@@ -69,10 +69,10 @@ NEW_TAB_TEXT = """child: Text(
 REPLACEMENTS = {
     "Cargo.toml": [
         ('Copyright © 2025 Purslane Ltd.', f'Copyright © 2025 {NEW_DOMAIN}.'),
-        ('ProductName = "RustDesk"', f'ProductName = "{NEW_APP_NAME}"'),
-        ('FileDescription = "RustDesk Remote Desktop"', f'FileDescription = "{NEW_APP_NAME} Remote Desktop"'),
+        ('ProductName = "RustDesk"', f'ProductName = "{NEW_EXE_BASE_NAME}"'),
+        ('FileDescription = "RustDesk Remote Desktop"', f'FileDescription = "{NEW_EXE_BASE_NAME} Remote Desktop"'),
         ('OriginalFilename = "rustdesk.exe"', f'OriginalFilename = "{NEW_EXE_NAME}"'),
-        ('name = "RustDesk"', f'name = "{NEW_APP_NAME}"')
+        ('name = "RustDesk"', f'name = "{NEW_EXE_BASE_NAME}"')
     ],
     "build.py": [
         ('rustdesk.exe', NEW_EXE_NAME),
@@ -118,14 +118,14 @@ REPLACEMENTS = {
     ],
     "flutter/windows/runner/Runner.rc": [
         ('"CompanyName", "Purslane Ltd"', f'"CompanyName", "{NEW_DOMAIN}"'),
-        ('"FileDescription", "RustDesk Remote Desktop"', f'"FileDescription", "{NEW_APP_NAME} Remote Desktop"'),
+        ('"FileDescription", "RustDesk Remote Desktop"', f'"FileDescription", "{NEW_EXE_BASE_NAME} Remote Desktop"'),
         ('"InternalName", "rustdesk"', f'"InternalName", "{NEW_EXE_BASE_NAME}"'),
         ('"LegalCopyright", "Copyright © 2025 Purslane Ltd. All rights reserved."', f'"LegalCopyright", "Copyright © 2025 {NEW_DOMAIN}. All rights reserved."'),
         ('"OriginalFilename", "rustdesk.exe"', f'"OriginalFilename", "{NEW_EXE_NAME}"'),
-        ('"ProductName", "RustDesk"', f'"ProductName", "{NEW_APP_NAME}"')
+        ('"ProductName", "RustDesk"', f'"ProductName", "{NEW_EXE_BASE_NAME}"')
     ],
     "libs/hbb_common/src/config.rs": [
-        ('RwLock::new("RustDesk".to_owned())', f'RwLock::new("{NEW_APP_NAME}".to_owned())'),
+        ('RwLock::new("RustDesk".to_owned())', f'RwLock::new("{NEW_EXE_BASE_NAME}".to_owned())'),
         ('"https://rustdesk.com/docs/en/"', f'"{NEW_URL}/"'),
         ('"https://rustdesk.com/docs/en/manual/linux/#x11-required"', f'"{NEW_URL}/"'),
         ('"https://github.com/rustdesk/rustdesk/wiki/Headless-Linux-Support"', f'"{NEW_URL}/"'),
@@ -137,9 +137,9 @@ REPLACEMENTS = {
     ],
     "libs/portable/Cargo.toml": [
         ('Copyright © 2025 Purslane Ltd.', f'Copyright © 2025 {NEW_DOMAIN}.'),
-        ('ProductName = "RustDesk"', f'ProductName = "{NEW_APP_NAME}"'),
+        ('ProductName = "RustDesk"', f'ProductName = "{NEW_EXE_BASE_NAME}"'),
         ('OriginalFilename = "rustdesk.exe"', f'OriginalFilename = "{NEW_EXE_NAME}"'),
-        ('FileDescription = "RustDesk Remote Desktop"', f'FileDescription = "{NEW_APP_NAME} Remote Desktop"')
+        ('FileDescription = "RustDesk Remote Desktop"', f'FileDescription = "{NEW_EXE_BASE_NAME} Remote Desktop"')
     ],
     "libs/portable/generate.py": [
         ('default is rustdesk.exe', f'default is {NEW_EXE_NAME}'),
@@ -149,10 +149,10 @@ REPLACEMENTS = {
         ('APP_PREFIX: &str = "rustdesk"', f'APP_PREFIX: &str = "{NEW_PREFIX}"')
     ],
     "src/auth_2fa.rs": [
-        ('ISSUER: &str = "RustDesk"', f'ISSUER: &str = "{NEW_APP_NAME}"')
+        ('ISSUER: &str = "RustDesk"', f'ISSUER: &str = "{NEW_EXE_BASE_NAME}"')
     ],
     "src/clipboard.rs": [
-        ('"RustDesk placeholder to clear the file clipboard"', f'"{NEW_APP_NAME} placeholder to clear the file clipboard"')
+        ('"RustDesk placeholder to clear the file clipboard"', f'"{NEW_EXE_BASE_NAME} placeholder to clear the file clipboard"')
     ],
     "src/common.rs": [
         ('"https://admin.rustdesk.com"', f'"{NEW_URL}"'),
@@ -178,7 +178,7 @@ REPLACEMENTS = {
     "src/main.rs": [
         ('App::new("rustdesk")', f'App::new("{NEW_PREFIX}")'),
         ('"Purslane Ltd<info@rustdesk.com>"', f'"{NEW_EMAIL}"'),
-        ('about("RustDesk command line tool")', f'about("{NEW_APP_NAME} command line tool")')
+        ('about("RustDesk command line tool")', f'about("{NEW_EXE_BASE_NAME} command line tool")')
     ]
 }
 
