@@ -58,10 +58,10 @@ def generate_icons(logo_base64_str, app_name, target_dir="."):
     # ==========================================
     win_res_dir = os.path.join(target_dir, "flutter", "windows", "runner", "resources")
     if os.path.exists(win_res_dir):
-        img.save(os.path.join(win_res_dir, "app_icon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (256, 256)])
+        img.save(os.path.join(win_res_dir, "app_icon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (128, 128), (256, 256)])
         
         if os.path.exists(res_dir):
-            img.save(os.path.join(res_dir, "icon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (256, 256)])
+            img.save(os.path.join(res_dir, "icon.ico"), format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (128, 128), (256, 256)])
             img.save(os.path.join(res_dir, "tray-icon.ico"), format="ICO", sizes=[(16, 16), (32, 32)])
         print("Success: Generated Windows app and tray icons.")
     else:
@@ -93,14 +93,38 @@ def generate_icons(logo_base64_str, app_name, target_dir="."):
     # ==========================================
     assets_dir = os.path.join(target_dir, "flutter", "assets")
     if os.path.exists(assets_dir):
+        # 5.1 Generate Flutter fallback UI icon (256x256 PNG)
+        img.resize((256, 256), Image.Resampling.LANCZOS).save(os.path.join(assets_dir, "icon.png"), "PNG")
+        
+        # 5.2 Synthesize horizontal UI Logo (300x60)
         logo_canvas = Image.new("RGBA", (300, 60), (0, 0, 0, 0))
         icon_h = 42
         icon_w = int(img.width * (icon_h / img.height))
         resized_ui_icon = img.resize((icon_w, icon_h), Image.Resampling.LANCZOS)
-        logo_canvas.paste(resized_ui_icon, (15, 9), resized_ui_icon)
         
+        layout = os.getenv("LOGO_LAYOUT", "IconLeft")
+        font_size_str = os.getenv("LOGO_FONT_SIZE", "22")
+        try:
+            font_size = int(font_size_str)
+        except ValueError:
+            font_size = 22
+            
+        text_color_hex = os.getenv("LOGO_TEXT_COLOR", "#333333")
+        if text_color_hex.startswith("#"):
+            text_color_hex = text_color_hex[1:]
+        if len(text_color_hex) == 6:
+            text_color = (int(text_color_hex[0:2], 16), int(text_color_hex[2:4], 16), int(text_color_hex[4:6], 16), 255)
+        else:
+            text_color = (51, 51, 51, 255)
+
+        if layout.lower() == "iconright":
+            logo_canvas.paste(resized_ui_icon, (285 - icon_w, 9), resized_ui_icon)
+            text_x = 15
+        else:
+            logo_canvas.paste(resized_ui_icon, (15, 9), resized_ui_icon)
+            text_x = 72
+            
         draw = ImageDraw.Draw(logo_canvas)
-        font_size = 20
         font = None
         # Try loading system font, fallback to default font if failed
         font_paths = [
@@ -118,9 +142,11 @@ def generate_icons(logo_base64_str, app_name, target_dir="."):
         if font is None:
             font = ImageFont.load_default()
             
-        draw.text((72, 16), app_name, fill=(51, 51, 51, 255), font=font)
+        # Draw vertically centered text
+        text_w, text_h = draw.textsize(app_name, font=font) if hasattr(draw, "textsize") else (100, 20)
+        draw.text((text_x, 30 - text_h // 2), app_name, fill=text_color, font=font)
         logo_canvas.save(os.path.join(assets_dir, "logo.png"), "PNG")
-        print("Success: Synthesized internal horizontal UI Logo with App name text.")
+        print(f"Success: Synthesized internal horizontal UI Logo (Layout: {layout}, Size: {font_size}).")
     else:
         print("Skip: flutter/assets directory not found.")
 
