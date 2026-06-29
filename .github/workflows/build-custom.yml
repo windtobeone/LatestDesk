@@ -36,17 +36,21 @@ on:
     types: [build-custom-client]
 
 env:
-  FLUTTER_RUST_VERSION: "1.80.1"
-  SCITER_RUST_VERSION: "1.75.0"
-  RUST_VERSION: "1.80.1"
+  SCITER_RUST_VERSION: "1.75"
+  RUST_VERSION: "1.75"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.5"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
 
 
+
 jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
   build-windows:
     name: Build Branded Windows Client
+    needs: generate-bridge
     runs-on: windows-2022
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -60,6 +64,12 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: recursive
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v2.0.9
@@ -87,18 +97,12 @@ jobs:
           cd $(dirname $(dirname $(which flutter)))
           [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
 
-      - name: Install Rust 1.80.1
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: ${{ env.FLUTTER_RUST_VERSION }}
+          toolchain: ${{ env.SCITER_RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
           components: "rustfmt"
-
-      - name: Install Rust 1.75.0
-        run: |
-          rustup toolchain install ${{ env.SCITER_RUST_VERSION }}-x86_64-pc-windows-msvc
-          rustup target add x86_64-pc-windows-msvc --toolchain ${{ env.SCITER_RUST_VERSION }}
-        shell: bash
 
 
       - uses: Swatinem/rust-cache@v2
@@ -161,9 +165,6 @@ jobs:
 
       - name: Build Windows Flutter Executable
         run: |
-          # Use Rust 1.80.1 for the Flutter build (so it matches the pre-generated bridge files)
-          rustup default ${{ env.FLUTTER_RUST_VERSION }}-x86_64-pc-windows-msvc
-
           # 1. Build Windows Flutter Executable (64-bit modern UI)
           python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
 
@@ -216,9 +217,6 @@ jobs:
 
       - name: Build Windows Sciter Executable
         run: |
-          # Use Rust 1.75.0 for the Sciter build (Win7 compatible, no bridge compilation needed)
-          rustup default ${{ env.SCITER_RUST_VERSION }}-x86_64-pc-windows-msvc
-
           # 3. Build Windows Sciter Executable
           python3 .\build.py --portable --hwcodec --vram
 
