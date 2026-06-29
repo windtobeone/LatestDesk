@@ -231,18 +231,36 @@ jobs:
           fi
 
       - name: Build Windows Sciter Executable
+        shell: bash
         run: |
-          # 3. Build Windows Sciter Executable
-          python3 .\build.py --portable --hwcodec --vram
+          # 1. Run Sciter inline resource compiler script
+          python3 res/inline-sciter.py
 
-          # Move and rename the Sciter portable exe to matched branding
-          $sciter_exe = Get-ChildItem -Filter "rustdesk-*-win7-install.exe" | Select-Object -First 1
-          if ($sciter_exe) {
-              mv $sciter_exe.FullName "./finished_client/Sciter_Win7_Legacy/${env:NEW_APP_NAME}-win7-legacy.exe"
-          } else {
-              Write-Error "Sciter build failed to output executable!"
-              exit 1
-          }
+          # 2. Build the Sciter 64-bit release binary
+          cargo build --locked --release --features inline,vram,hwcodec --bins
+
+          # 3. Prepare the temporary Sciter release directory
+          mkdir -p ./Release_Sciter
+          mv ./target/release/rustdesk.exe ./Release_Sciter/rustdesk.exe
+
+          # 4. Download 64-bit sciter.dll (critical for legacy Windows)
+          curl -LJ -o ./Release_Sciter/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x64/sciter.dll
+
+          # 5. Download and extract usbmmidd_v2 driver into the release folder
+          curl -LJ -o ./usbmmidd_v2_sciter.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
+          unzip ./usbmmidd_v2_sciter.zip
+          rm -rf ./usbmmidd_v2/Win32 ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat
+          mv ./usbmmidd_v2 ./Release_Sciter/
+
+          # 6. Generate the self-extracted portable installer
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../Release_Sciter/ -o . -e ../../Release_Sciter/rustdesk.exe
+          popd
+
+          # 7. Move and rename the final portable installer to finished directory matching branding
+          mv ./target/release/rustdesk-portable-packer.exe ./finished_client/Sciter_Win7_Legacy/${NEW_APP_NAME}-win7-legacy.exe
 
       - name: Zip finished custom client package
         run: |
