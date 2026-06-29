@@ -42,8 +42,6 @@ env:
   FLUTTER_VERSION: "3.24.5"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
 
-
-
 jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
@@ -57,8 +55,8 @@ jobs:
       platform: x64
       target_version: Windows10
 
-  build-windows:
-    name: Build Branded Windows Client
+  build-windows-flutter:
+    name: Build Branded Windows Flutter Client (64-bit)
     needs: [generate-bridge, build-RustDeskTempTopMostWindow]
     runs-on: windows-2022
     steps:
@@ -113,10 +111,9 @@ jobs:
           targets: x86_64-pc-windows-msvc
           components: "rustfmt"
 
-
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: windows-2022
+          prefix-key: windows-2022-flutter
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@v11
@@ -177,22 +174,18 @@ jobs:
           # 1. Build Windows Flutter Executable (64-bit modern UI)
           python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
 
-          # 2. Create the final output structure
-          mkdir ./finished_client
-          mkdir ./finished_client/Flutter_Win10_x64
-          mkdir ./finished_client/Sciter_Win7_Legacy
+          # 2. Create raw release structure
+          mkdir ./Release_Flutter
+          mv ./flutter/build/windows/x64/runner/Release/* ./Release_Flutter/
 
-          # Move compiled Flutter release files
-          mv ./flutter/build/windows/x64/runner/Release/* ./finished_client/Flutter_Win10_x64/
-
-          # Download usbmmidd_v2.zip and extract it to ./finished_client/Flutter_Win10_x64
+          # Download usbmmidd_v2.zip and extract it to ./Release_Flutter
           Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
           Expand-Archive usbmmidd_v2.zip -DestinationPath .
           Remove-Item -Path usbmmidd_v2\Win32 -Recurse
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
-          mv -Force .\usbmmidd_v2 ./finished_client/Flutter_Win10_x64/
+          mv -Force .\usbmmidd_v2 ./Release_Flutter/
 
-          # Download printer driver files and extract them to ./finished_client/Flutter_Win10_x64
+          # Download printer driver files and extract them to ./Release_Flutter
           try {
             Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
             Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
@@ -205,10 +198,10 @@ jobs:
             if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
                 Write-Output "rustdesk_printer_driver_v4-1.4, checksums match, extract the file."
                 Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
-                mkdir ./finished_client/Flutter_Win10_x64/drivers
-                mv -Force .\rustdesk_printer_driver_v4-1.4 ./finished_client/Flutter_Win10_x64/drivers/RustDeskPrinterDriver
+                mkdir ./Release_Flutter/drivers
+                mv -Force .\rustdesk_printer_driver_v4-1.4 ./Release_Flutter/drivers/RustDeskPrinterDriver
                 Expand-Archive printer_driver_adapter.zip -DestinationPath .
-                mv -Force .\printer_driver_adapter.dll ./finished_client/Flutter_Win10_x64/
+                mv -Force .\printer_driver_adapter.dll ./Release_Flutter/
             }
           } catch {
               Write-Host "Ignore the printer driver error."
@@ -218,19 +211,112 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: topmostwindow-artifacts
-          path: "./finished_client/Flutter_Win10_x64"
+          path: "./Release_Flutter"
 
-      - name: Find and Propagate Runner.res
-        continue-on-error: true
+      - name: Compile and Pack Flutter Portable Single EXE
         shell: bash
         run: |
-          # Copy the generated resource file containing icons to libs/portable
-          runner_res=$(find . -name "Runner.res");
-          if [ "$runner_res" != "" ]; then
-            cp $runner_res ./libs/portable/Runner.res;
-          fi
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../Release_Flutter/ -o . -e ../../Release_Flutter/rustdesk.exe
+          popd
+          mkdir -p ./flutter_out
+          mv ./target/release/rustdesk-portable-packer.exe ./flutter_out/${NEW_APP_NAME}.exe
 
-      - name: Build Windows Sciter Executable
+      - name: Upload Flutter Client Temp Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-flutter-client
+          path: ./flutter_out/
+
+  build-windows-sciter-x64:
+    name: Build Branded Windows Sciter Client (64-bit)
+    runs-on: windows-2022
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.SCITER_RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: windows-2022-sciter-x64
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
+          fi
+        shell: bash
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Pillow for Icon Generation
+        run: |
+          python -m pip install --upgrade pip
+          pip install Pillow
+
+      - name: Generate Custom Icons and Assets
+        run: |
+          Set-Content -Path logo_base64.txt -Value "${{ github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}"
+          python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name || github.event.inputs.client_name }}"
+
+      - name: Setup Custom Environment variables for oneKey.py
+        shell: bash
+        run: |
+          echo "NEW_APP_NAME=${{ github.event.client_payload.client_name || github.event.inputs.client_name }}" >> $GITHUB_ENV
+          echo "NEW_EXE_NAME=${{ github.event.client_payload.client_exe_name || github.event.inputs.client_exe_name }}" >> $GITHUB_ENV
+          echo "NEW_PREFIX=${{ github.event.client_payload.client_prefix || github.event.inputs.client_prefix }}" >> $GITHUB_ENV
+          echo "NEW_IP=${{ github.event.client_payload.relay_host || github.event.inputs.relay_host }}" >> $GITHUB_ENV
+          echo "NEW_PUB_KEY=${{ github.event.client_payload.relay_key || github.event.inputs.relay_key }}" >> $GITHUB_ENV
+          echo "NEW_API_SERVER=${{ github.event.client_payload.api_server || github.event.inputs.api_server }}" >> $GITHUB_ENV
+          echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 || github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
+          echo "APPLY_PATCHES=${{ github.event.client_payload.apply_patches || github.event.inputs.apply_patches }}" >> $GITHUB_ENV
+
+      - name: Run Customize Script and Apply Patches
+        run: |
+          python oneKey.py
+
+      - name: Build Windows Sciter x64 Executable
         shell: bash
         run: |
           # 1. Run Sciter inline resource compiler script
@@ -240,33 +326,197 @@ jobs:
           cargo build --locked --release --features inline,vram,hwcodec --bins
 
           # 3. Prepare the temporary Sciter release directory
-          mkdir -p ./Release_Sciter
-          mv ./target/release/rustdesk.exe ./Release_Sciter/rustdesk.exe
+          mkdir -p ./Release_Sciter_x64
+          mv ./target/release/rustdesk.exe ./Release_Sciter_x64/rustdesk.exe
 
-          # 4. Download 64-bit sciter.dll (critical for legacy Windows)
-          curl -LJ -o ./Release_Sciter/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x64/sciter.dll
+          # 4. Download 64-bit sciter.dll
+          curl -LJ -o ./Release_Sciter_x64/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x64/sciter.dll
 
           # 5. Download and extract usbmmidd_v2 driver into the release folder
           curl -LJ -o ./usbmmidd_v2_sciter.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
           unzip ./usbmmidd_v2_sciter.zip
           rm -rf ./usbmmidd_v2/Win32 ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat
-          mv ./usbmmidd_v2 ./Release_Sciter/
+          mv ./usbmmidd_v2 ./Release_Sciter_x64/
 
           # 6. Generate the self-extracted portable installer
           sed -i '/dpiAware/d' res/manifest.xml
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../Release_Sciter/ -o . -e ../../Release_Sciter/rustdesk.exe
+          python3 ./generate.py -f ../../Release_Sciter_x64/ -o . -e ../../Release_Sciter_x64/rustdesk.exe
           popd
 
-          # 7. Move and rename the final portable installer to finished directory matching branding
-          mv ./target/release/rustdesk-portable-packer.exe ./finished_client/Sciter_Win7_Legacy/${NEW_APP_NAME}-win7-legacy.exe
+          # 7. Move and rename the final portable installer
+          mkdir -p ./sciter_x64_out
+          mv ./target/release/rustdesk-portable-packer.exe ./sciter_x64_out/${NEW_APP_NAME}-win7-legacy-x64.exe
+
+      - name: Upload Sciter x64 Client Temp Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-sciter-x64-client
+          path: ./sciter_x64_out/
+
+  build-windows-sciter-x86:
+    name: Build Branded Windows Sciter Client (32-bit)
+    runs-on: windows-2022
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: nightly-2023-10-13-i686-pc-windows-msvc
+          targets: i686-pc-windows-msvc
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: windows-2022-sciter-x86
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x86-windows-static
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --triplet x86-windows-static --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
+          fi
+        shell: bash
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Pillow for Icon Generation
+        run: |
+          python -m pip install --upgrade pip
+          pip install Pillow
+
+      - name: Generate Custom Icons and Assets
+        run: |
+          Set-Content -Path logo_base64.txt -Value "${{ github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}"
+          python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name || github.event.inputs.client_name }}"
+
+      - name: Setup Custom Environment variables for oneKey.py
+        shell: bash
+        run: |
+          echo "NEW_APP_NAME=${{ github.event.client_payload.client_name || github.event.inputs.client_name }}" >> $GITHUB_ENV
+          echo "NEW_EXE_NAME=${{ github.event.client_payload.client_exe_name || github.event.inputs.client_exe_name }}" >> $GITHUB_ENV
+          echo "NEW_PREFIX=${{ github.event.client_payload.client_prefix || github.event.inputs.client_prefix }}" >> $GITHUB_ENV
+          echo "NEW_IP=${{ github.event.client_payload.relay_host || github.event.inputs.relay_host }}" >> $GITHUB_ENV
+          echo "NEW_PUB_KEY=${{ github.event.client_payload.relay_key || github.event.inputs.relay_key }}" >> $GITHUB_ENV
+          echo "NEW_API_SERVER=${{ github.event.client_payload.api_server || github.event.inputs.api_server }}" >> $GITHUB_ENV
+          echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 || github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
+          echo "APPLY_PATCHES=${{ github.event.client_payload.apply_patches || github.event.inputs.apply_patches }}" >> $GITHUB_ENV
+
+      - name: Run Customize Script and Apply Patches
+        run: |
+          python oneKey.py
+
+      - name: Build Windows Sciter x86 Executable
+        shell: bash
+        run: |
+          # 1. Run Sciter inline resource compiler script
+          python3 res/inline-sciter.py
+
+          # 2. Patch sciter x86
+          sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
+          cargo update -p sciter-rs --precise 674e07d3066ca9a92ced3816203ab6b652629d1e
+
+          # 3. Build the Sciter 32-bit release binary
+          cargo build --locked --release --target i686-pc-windows-msvc --features inline,vram,hwcodec --bins
+
+          # 4. Prepare the temporary Sciter release directory
+          mkdir -p ./Release_Sciter_x86
+          mv ./target/i686-pc-windows-msvc/release/rustdesk.exe ./Release_Sciter_x86/rustdesk.exe
+
+          # 5. Download 32-bit sciter.dll (critical for legacy Windows)
+          curl -LJ -o ./Release_Sciter_x86/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
+
+          # 6. Download and extract usbmmidd_v2 driver into the release folder
+          curl -LJ -o ./usbmmidd_v2_sciter.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
+          unzip ./usbmmidd_v2_sciter.zip
+          rm -rf ./usbmmidd_v2/Win32 ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat
+          mv ./usbmmidd_v2 ./Release_Sciter_x86/
+
+          # 7. Generate the self-extracted portable installer (compiled as 32-bit)
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../Release_Sciter_x86/ -o . -e ../../Release_Sciter_x86/rustdesk.exe -t i686-pc-windows-msvc
+          popd
+
+          # 8. Move and rename the final portable installer
+          mkdir -p ./sciter_x86_out
+          mv ./target/i686-pc-windows-msvc/release/rustdesk-portable-packer.exe ./sciter_x86_out/${NEW_APP_NAME}-win7-legacy-x86.exe
+
+      - name: Upload Sciter x86 Client Temp Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-sciter-x86-client
+          path: ./sciter_x86_out/
+
+  merge-and-package:
+    name: Merge and Package All Clients
+    needs: [build-windows-flutter, build-windows-sciter-x64, build-windows-sciter-x86]
+    runs-on: windows-2022
+    steps:
+      - name: Create Final Packages directory
+        run: |
+          mkdir ./finished_client
+          mkdir ./finished_client/Flutter_Win10_x64
+          mkdir ./finished_client/Sciter_Win7_Legacy_x64
+          mkdir ./finished_client/Sciter_Win7_Legacy_x86
+
+      - name: Download Flutter Client
+        uses: actions/download-artifact@v4
+        with:
+          name: custom-flutter-client
+          path: ./finished_client/Flutter_Win10_x64
+
+      - name: Download Sciter x64 Client
+        uses: actions/download-artifact@v4
+        with:
+          name: custom-sciter-x64-client
+          path: ./finished_client/Sciter_Win7_Legacy_x64
+
+      - name: Download Sciter x86 Client
+        uses: actions/download-artifact@v4
+        with:
+          name: custom-sciter-x86-client
+          path: ./finished_client/Sciter_Win7_Legacy_x86
 
       - name: Zip finished custom client package
         run: |
-          # Compress both versions into custom_client.zip
           Compress-Archive -Path ./finished_client/* -DestinationPath ./custom_client.zip
-
 
       - name: Upload Finished Custom Client Zip
         uses: actions/upload-artifact@v4
