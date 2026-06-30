@@ -227,10 +227,9 @@ def apply_customization():
     custom_txt_b64 = os.getenv("CUSTOM_TXT_BASE64", "")
     if custom_txt_b64:
         try:
-            decoded = base64.b64decode(custom_txt_b64)
             os.makedirs("src", exist_ok=True)
-            with open("src/custom.txt", "wb") as f:
-                f.write(decoded)
+            with open("src/custom.txt", "w", encoding="utf-8", newline="\n") as f:
+                f.write(custom_txt_b64.strip())
             print("Success: custom.txt written successfully")
         except Exception as e:
             print(f"Error: Failed to write custom.txt: {e}")
