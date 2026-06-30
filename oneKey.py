@@ -170,7 +170,8 @@ REPLACEMENTS = {
         ('is_public("https://api.rustdesk.com")', f'is_public("https://api.{NEW_DOMAIN}")'),
         ('is_public("https://rustdesk.computer.com")', f'is_public("https://{NEW_PREFIX}.computer.com")'),
         ('is_public("rustdesk.comhello.com")', f'is_public("{NEW_DOMAIN}hello.com")'),
-        ('"https://admin.rustdesk.com/api/login"', f'"{NEW_URL}/api/login"')
+        ('"https://admin.rustdesk.com/api/login"', f'"{NEW_URL}/api/login"'),
+        ('"5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM="', f'"{NEW_PUB_KEY}"')
     ],
     "src/lang.rs": [
         ('&& name != "powered_by_me"', ' ')
