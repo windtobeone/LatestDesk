@@ -232,6 +232,7 @@ jobs:
           path: ./flutter_out/
 
   build-windows-sciter-x64:
+    if: false
     name: Build Branded Windows Sciter Client (64-bit)
     runs-on: windows-2022
     steps:
@@ -358,6 +359,7 @@ jobs:
           path: ./sciter_x64_out/
 
   build-windows-sciter-x86:
+    if: false
     name: Build Branded Windows Sciter Client (32-bit)
     runs-on: windows-2022
     steps:
@@ -489,33 +491,19 @@ jobs:
 
   merge-and-package:
     name: Merge and Package All Clients
-    needs: [build-windows-flutter, build-windows-sciter-x64, build-windows-sciter-x86]
+    needs: [build-windows-flutter]
     runs-on: windows-2022
     steps:
       - name: Create Final Packages directory
         run: |
           mkdir ./finished_client
           mkdir ./finished_client/Flutter_Win10_x64
-          mkdir ./finished_client/Sciter_Win7_Legacy_x64
-          mkdir ./finished_client/Sciter_Win7_Legacy_x86
 
       - name: Download Flutter Client
         uses: actions/download-artifact@v4
         with:
           name: custom-flutter-client
           path: ./finished_client/Flutter_Win10_x64
-
-      - name: Download Sciter x64 Client
-        uses: actions/download-artifact@v4
-        with:
-          name: custom-sciter-x64-client
-          path: ./finished_client/Sciter_Win7_Legacy_x64
-
-      - name: Download Sciter x86 Client
-        uses: actions/download-artifact@v4
-        with:
-          name: custom-sciter-x86-client
-          path: ./finished_client/Sciter_Win7_Legacy_x86
 
       - name: Zip finished custom client package
         run: |

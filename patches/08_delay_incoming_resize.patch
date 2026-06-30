@@ -14,6 +14,16 @@ index 2345678..89abcde 100644
 -      isMainWindow: true, alwaysOnTop: alwaysOnTop);
 +      isMainWindow: true, alwaysOnTop: alwaysOnTop, size: initSize);
    windowManager.waitUntilReadyToShow(windowOptions, () async {
+@@ -174,5 +178,7 @@ void runMainApp(bool startService) async {
+     windowManager.setOpacity(1);
+     windowManager.setTitle(getWindowName());
+     // Do not use `windowManager.setResizable()` here.
+-    setResizable(!bind.isIncomingOnly());
++    Future.delayed(const Duration(milliseconds: 1000), () {
++      setResizable(!bind.isIncomingOnly());
++    });
+   });
+ }
 diff --git a/flutter/lib/desktop/pages/desktop_home_page.dart b/flutter/lib/desktop/pages/desktop_home_page.dart
 index 1234567..89abcde 100644
 --- a/flutter/lib/desktop/pages/desktop_home_page.dart
@@ -23,7 +33,7 @@ index 1234567..89abcde 100644
        if (size != imcomingOnlyHomeSize) {
          imcomingOnlyHomeSize = size;
 -        windowManager.setSize(getIncomingOnlyHomeSize());
-+        Future.delayed(const Duration(milliseconds: 200), () {
++        Future.delayed(const Duration(milliseconds: 1000), () {
 +          windowManager.setSize(getIncomingOnlyHomeSize());
 +        });
        }
