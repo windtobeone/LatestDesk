@@ -240,23 +240,10 @@ def apply_customization():
     apply_patches_str = os.getenv("APPLY_PATCHES", "")
     patch_ids = [p.strip() for p in apply_patches_str.split(",") if p.strip()] if apply_patches_str else []
     
-    # Auto-detect incoming-only config to trigger patch 08
-    if custom_txt_b64:
-        try:
-            decoded = base64.b64decode(custom_txt_b64.strip())
-            if len(decoded) > 64:
-                payload = decoded[64:]
-                try:
-                    import json
-                    config_data = json.loads(payload.decode('utf-8'))
-                    if config_data.get("conn-type") == "incoming":
-                        print("Info: incoming-only client configuration detected, auto enabling patch '08'")
-                        if "08" not in patch_ids:
-                            patch_ids.append("08")
-                except Exception as je:
-                    print(f"Warning: Failed to parse JSON config payload: {je}")
-        except Exception as e:
-            print(f"Warning: Failed to decode custom_txt_b64: {e}")
+    # Note: patch 08 (incoming-only window resize) has been removed.
+    # The original RustDesk code already has complete built-in support for
+    # incoming-only mode via addPostFrameCallback and 300ms delayed _updateWindowSize calls.
+    # Applying patch 08 caused window initialization failures in cloud builds.
 
     if patch_ids:
         print(f"Info: Found patches to apply: {patch_ids}")
