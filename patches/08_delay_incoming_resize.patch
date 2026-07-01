@@ -1,8 +1,55 @@
+diff --git a/flutter/lib/desktop/pages/desktop_home_page.dart b/flutter/lib/desktop/pages/desktop_home_page.dart
+index 42ec10032..37cc96d15 100644
+--- a/flutter/lib/desktop/pages/desktop_home_page.dart
++++ b/flutter/lib/desktop/pages/desktop_home_page.dart
+@@ -867,9 +867,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
+     }
+     if (renderObject is RenderBox) {
+       final size = renderObject.size;
+-      if (size != imcomingOnlyHomeSize) {
++      if (size != imcomingOnlyHomeSize && size.width > 100 && size.height > 100) {
+         imcomingOnlyHomeSize = size;
+-        windowManager.setSize(getIncomingOnlyHomeSize());
++        Future.delayed(const Duration(milliseconds: 1000), () {
++          windowManager.setSize(getIncomingOnlyHomeSize());
++        });
+       }
+     }
+   }
+diff --git a/flutter/lib/desktop/pages/desktop_tab_page.dart b/flutter/lib/desktop/pages/desktop_tab_page.dart
+index 6440e55a1..a7c7614db 100644
+--- a/flutter/lib/desktop/pages/desktop_tab_page.dart
++++ b/flutter/lib/desktop/pages/desktop_tab_page.dart
+@@ -54,13 +54,15 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
+         )));
+     if (bind.isIncomingOnly()) {
+       tabController.onSelected = (key) {
+-        if (key == kTabLabelHomePage) {
+-          windowManager.setSize(getIncomingOnlyHomeSize());
+-          setResizable(false);
+-        } else {
+-          windowManager.setSize(getIncomingOnlySettingsSize());
+-          setResizable(true);
+-        }
++        Future.delayed(const Duration(milliseconds: 1000), () {
++          if (key == kTabLabelHomePage) {
++            windowManager.setSize(getIncomingOnlyHomeSize());
++            setResizable(false);
++          } else {
++            windowManager.setSize(getIncomingOnlySettingsSize());
++            setResizable(true);
++          }
++        });
+       };
+     }
+   }
 diff --git a/flutter/lib/main.dart b/flutter/lib/main.dart
-index 2345678..89abcde 100644
+index 9bd68ed60..67e430944 100644
 --- a/flutter/lib/main.dart
 +++ b/flutter/lib/main.dart
-@@ -166,13 +166,15 @@ void runMainApp(bool startService) async {
+@@ -164,17 +164,19 @@ void runMainApp(bool startService) async {
+     final handledByUniLinks = await initUniLinks();
+     debugPrint("handled by uni links: $handledByUniLinks");
      if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs)) {
 -      windowManager.hide();
 +      await windowManager.hide();
@@ -23,21 +70,4 @@ index 2345678..89abcde 100644
 +    });
    });
  }
-
-diff --git a/flutter/lib/desktop/pages/desktop_home_page.dart b/flutter/lib/desktop/pages/desktop_home_page.dart
-index 1234567..89abcde 100644
---- a/flutter/lib/desktop/pages/desktop_home_page.dart
-+++ b/flutter/lib/desktop/pages/desktop_home_page.dart
-@@ -868,7 +868,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
-     if (renderObject is RenderBox) {
-       final size = renderObject.size;
--      if (size != imcomingOnlyHomeSize) {
--        imcomingOnlyHomeSize = size;
--        windowManager.setSize(getIncomingOnlyHomeSize());
-+      if (size != imcomingOnlyHomeSize && size.width > 100 && size.height > 100) {
-+        imcomingOnlyHomeSize = size;
-+        Future.delayed(const Duration(milliseconds: 1000), () {
-+          windowManager.setSize(getIncomingOnlyHomeSize());
-+        });
-       }
-     }
+ 
