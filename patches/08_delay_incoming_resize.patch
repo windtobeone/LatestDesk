@@ -2,19 +2,18 @@ diff --git a/flutter/lib/main.dart b/flutter/lib/main.dart
 index 2345678..89abcde 100644
 --- a/flutter/lib/main.dart
 +++ b/flutter/lib/main.dart
-@@ -155,5 +155,9 @@ void runMainApp(bool startService) async {
-   }
- 
-+  Size? initSize;
-+  if (isDesktop && bind.isIncomingOnly()) {
-+    initSize = getIncomingOnlyHomeSize();
-+  }
-   // Set window option.
-   WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
--      isMainWindow: true, alwaysOnTop: alwaysOnTop);
-+      isMainWindow: true, alwaysOnTop: alwaysOnTop, size: initSize);
-   windowManager.waitUntilReadyToShow(windowOptions, () async {
-@@ -174,5 +178,7 @@ void runMainApp(bool startService) async {
+@@ -166,13 +166,15 @@ void runMainApp(bool startService) async {
+     if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs)) {
+-      windowManager.hide();
++      await windowManager.hide();
+     } else {
+-      windowManager.show();
+-      windowManager.focus();
++      await windowManager.show();
++      await windowManager.focus();
+       // Move registration of active main window here to prevent from async visible check.
+       rustDeskWinManager.registerActiveWindow(kWindowMainId);
+     }
      windowManager.setOpacity(1);
      windowManager.setTitle(getWindowName());
      // Do not use `windowManager.setResizable()` here.
@@ -24,6 +23,7 @@ index 2345678..89abcde 100644
 +    });
    });
  }
+
 diff --git a/flutter/lib/desktop/pages/desktop_home_page.dart b/flutter/lib/desktop/pages/desktop_home_page.dart
 index 1234567..89abcde 100644
 --- a/flutter/lib/desktop/pages/desktop_home_page.dart
