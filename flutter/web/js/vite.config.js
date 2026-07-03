@@ -1,9 +1,17 @@
 import { defineConfig } from 'vite';
+import path from 'path';
 
 export default defineConfig({
+    resolve: {
+        alias: {
+            'libsodium-wrappers': path.resolve(__dirname, 'node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js'),
+            'libsodium': path.resolve(__dirname, 'node_modules/libsodium/dist/modules/libsodium.js')
+        }
+    },
     build: {
         manifest: false,
         rollupOptions: {
+            treeshake: false,
             output: {
                 entryFileNames: `[name].js`,
                 chunkFileNames: `[name].js`,
