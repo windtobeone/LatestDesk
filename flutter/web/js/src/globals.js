@@ -339,6 +339,9 @@ window.init = async () => {
   loadVp9(() => { });
   await initZstd();
   console.log('init done');
+  if (typeof window.onInitFinished === 'function') {
+    window.onInitFinished();
+  }
 }
 
 export function getPeers() {
