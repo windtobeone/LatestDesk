@@ -331,9 +331,9 @@ function _getByName(name, arg) {
   console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
     case 'option:session':
-      if (!curConn) return undefined;
+      if (!curConn) return null;
       const val = curConn.getOption(arg);
-      return val === "" ? undefined : val;
+      return val === "" ? null : val;
     case 'api_server':
       let rsv = localStorage.getItem("custom-rendezvous-server") || "";
       if (rsv.indexOf(":") > 0) {
