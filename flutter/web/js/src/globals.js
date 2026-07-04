@@ -21,14 +21,25 @@ export function msgbox(type, title, text) {
   if (!type || (type == 'error' && !text)) return;
   const text2 = text.toLowerCase();
   var hasRetry = checkIfRetry(type, title, text) ? 'true' : '';
-  onGlobalEvent(JSON.stringify({ name: 'msgbox', type, title, text, link: '', hasRetry }));
+  onGlobalEvent(JSON.stringify({
+    name: 'msgbox',
+    type: type || '',
+    title: title || '',
+    text: text || '',
+    link: '',
+    hasRetry
+  }));
 }
 
 function jsonfyForDart(payload) {
   var tmp = {};
   for (const [key, value] of Object.entries(payload)) {
     if (!key) continue;
-    tmp[key] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
+    if (value === null || value === undefined) {
+      tmp[key] = '';
+    } else {
+      tmp[key] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
+    }
   }
   return tmp;
 }
@@ -336,7 +347,13 @@ function _getByName(name, arg) {
         return null;
       }
       const val = curConn.getOption(arg);
-      const retVal = (val === "" || val === undefined || val === null) ? null : val;
+      let retVal = (val === "" || val === undefined || val === null) ? null : val;
+      if (arg === 'view_style' && !retVal) {
+        retVal = 'adaptive';
+      }
+      if (arg === 'scroll_style' && !retVal) {
+        retVal = 'scrollauto';
+      }
       console.log("DEBUG option:session", arg, "val is:", JSON.stringify(val), "returning:", retVal);
       return retVal;
     case 'api_server':

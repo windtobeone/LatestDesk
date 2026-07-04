@@ -889,10 +889,10 @@ class FfiModel with ChangeNotifier {
   handleMsgBox(Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     if (parent.target == null) return;
     final dialogManager = parent.target!.dialogManager;
-    final type = evt['type'] ?? '';
-    final title = evt['title'] ?? '';
-    final text = evt['text'] ?? '';
-    final link = evt['link'] ?? '';
+    final type = evt['type'];
+    final title = evt['title'];
+    final text = evt['text'];
+    final link = evt['link'];
 
     // Disable relative mouse mode on any error-type message to ensure cursor is released.
     // This includes connection errors, session-ending messages, elevation errors, etc.
@@ -1396,8 +1396,7 @@ class FfiModel with ChangeNotifier {
       final platformAdditions = evt['platform_additions'];
       if (platformAdditions != null && platformAdditions != '') {
         try {
-          _pi.platformAdditions =
-              (json.decode(platformAdditions) as Map<String, dynamic>?) ?? {};
+          _pi.platformAdditions = json.decode(platformAdditions);
         } catch (e) {
           debugPrint('Failed to decode platformAdditions $e');
         }
@@ -2271,9 +2270,9 @@ class CanvasModel with ChangeNotifier {
   updateSize() => _size = getSize();
 
   updateViewStyle({refreshMousePos = true, notify = true}) async {
-    var style = await bind.sessionGetViewStyle(sessionId: sessionId);
-    if (style == null || style.isEmpty) {
-      style = kRemoteViewStyleAdaptive;
+    final style = await bind.sessionGetViewStyle(sessionId: sessionId);
+    if (style == null) {
+      return;
     }
 
     updateSize();
