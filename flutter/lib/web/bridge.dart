@@ -88,6 +88,10 @@ class RustdeskImpl {
       required bool isSharedPassword,
       String? connToken,
       dynamic hint}) {
+    final licenseStatus = js.context.callMethod('getByName', ['license_status']);
+    if (licenseStatus != 'ok') {
+      throw Exception("Blocked: Invalid or expired license ($licenseStatus). Connection aborted.");
+    }
     return js.context.callMethod('setByName', [
       'session_add_sync',
       jsonEncode({
@@ -822,6 +826,10 @@ class RustdeskImpl {
   Future<String> mainGetLicense({dynamic hint}) {
     // TODO: implement
     return Future(() => '');
+  }
+
+  String sessionVerifyLicense({required Uint8List licenseBytes, dynamic hint}) {
+    return js.context.callMethod('getByName', ['session_verify_license', licenseBytes]);
   }
 
   Future<String> mainGetVersion({dynamic hint}) {

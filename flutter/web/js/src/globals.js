@@ -145,6 +145,64 @@ export function newConn() {
 }
 
 let sodium;
+export let licenseStatus = 'error';
+export let activeLicense = null;
+
+export function verifyLicense(licenseBytes) {
+  try {
+    if (!licenseBytes) {
+      licenseStatus = 'License file is empty';
+      return JSON.stringify({ status: "error", message: licenseStatus });
+    }
+    if (licenseBytes.length > 8192) {
+      licenseStatus = 'DoS_Blocked: license size too large';
+      return JSON.stringify({ status: "error", message: licenseStatus });
+    }
+    if (licenseBytes.length < 64) {
+      licenseStatus = 'Suspected_Tampering: size too small';
+      return JSON.stringify({ status: "error", message: licenseStatus });
+    }
+    
+    // Check for SPA/CDN 200 HTML redirect trap
+    const headerText = new TextDecoder().decode(licenseBytes.slice(0, 15)).toLowerCase();
+    if (headerText.includes("<!doctype") || headerText.includes("<html")) {
+      licenseStatus = 'License file not found (SPA HTML redirect)';
+      return JSON.stringify({ status: "error", message: licenseStatus });
+    }
+    
+    // Obfuscated Public Key (Ed25519)
+    const OBFUSCATED_PK_BYTES = [18,231,37,76,49,32,214,36,108,8,142,71,56,124,196,141,43,170,52,128,75,36,214,220,129,252,73,255,168,189,230,212];
+    const CRYPTO_SALT = 0xA5;
+    const pkBytes = new Uint8Array(OBFUSCATED_PK_BYTES.map(b => b ^ CRYPTO_SALT));
+    
+    const decryptedBytes = sodium.crypto_sign_open(licenseBytes, pkBytes);
+    const jsonStr = new TextDecoder().decode(decryptedBytes);
+    
+    activeLicense = JSON.parse(jsonStr);
+    
+    // Expiry Check
+    const currentTime = Math.floor(Date.now() / 1000);
+    const expireTime = activeLicense.expire_date;
+    const notBefore = activeLicense.not_before;
+    
+    if (currentTime < notBefore) {
+      licenseStatus = 'Clock Tampered: Current time is before issue time';
+      return JSON.stringify({ status: "error", message: licenseStatus });
+    }
+    if (currentTime > expireTime) {
+      licenseStatus = 'License Expired';
+      return JSON.stringify({ status: "error", message: licenseStatus });
+    }
+    
+    licenseStatus = 'ok';
+    return JSON.stringify({ status: "ok", message: "Verified Successfully" });
+  } catch (e) {
+    console.error("License verification failed:", e);
+    licenseStatus = 'Cryptographic Mismatch: Signature is invalid';
+    return JSON.stringify({ status: "error", message: licenseStatus });
+  }
+}
+
 export async function verify(signed, pk) {
   if (!sodium) {
     await _sodium.ready;
@@ -343,6 +401,10 @@ function getPeersForDart() {
 function _getByName(name, arg) {
   console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
+    case 'session_verify_license':
+      return verifyLicense(arg);
+    case 'license_status':
+      return licenseStatus;
     case 'option:session':
       const val = curConn ? curConn.getOption(arg) : null;
       let retVal = (val === "" || val === undefined || val === null) ? null : val;
@@ -428,6 +490,12 @@ window.init = async () => {
   }
   loadVp9(() => { });
   await initZstd();
+  try {
+    await _sodium.ready;
+    sodium = _sodium;
+  } catch (e) {
+    console.error("Failed to load libsodium-wrappers:", e);
+  }
   console.log('init done');
   if (typeof window.onInitFinished === 'function') {
     window.onInitFinished();

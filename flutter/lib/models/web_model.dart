@@ -110,10 +110,51 @@ class PlatformFFI {
       _ffiBind.sessionRegisterGpuTexture(
           sessionId: sessionId, display: display, ptr: ptr);
 
+  Future<void> _initializeLicenseBlocking() async {
+    final String baseHref = document.querySelector('base')?.getAttribute('href') ?? '/';
+    final String licenseUrl = '${window.location.origin}${baseHref}assets/assets/license.lic';
+
+    try {
+      final response = await HttpRequest.request(
+        licenseUrl,
+        responseType: 'arraybuffer',
+      );
+      final ByteBuffer buffer = response.response as ByteBuffer;
+      final Uint8List licenseBytes = buffer.asUint8List();
+
+      final String resultJson = _ffiBind.sessionVerifyLicense(licenseBytes: licenseBytes);
+      final Map<String, dynamic> result = jsonDecode(resultJson);
+
+      if (result['status'] != 'ok') {
+        throw Exception(result['message'] ?? 'Unknown verification error');
+      }
+      debugPrint("License status: OK");
+    } catch (e) {
+      final String errorMessage = e.toString().replaceFirst("Exception: ", "");
+      debugPrint("License verification blocked: $errorMessage");
+      
+      // Inject HSL dark mode warning screen
+      document.body?.innerHtml = '''
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background-color:#1e1e2e;color:#f38ba8;font-family:sans-serif;text-align:center;padding:20px;box-sizing:border-box;">
+          <svg style="width:80px;height:80px;margin-bottom:20px;fill:#f38ba8;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          <h1 style="font-size:28px;margin:0 0 10px 0;font-weight:bold;color:#f38ba8;">Enterprise Security Alert</h1>
+          <p style="font-size:16px;color:#a6adc8;margin:0 0 20px 0;max-width:500px;line-height:1.5;">$errorMessage</p>
+          <div style="font-size:12px;color:#585b70;border-top:1px solid #313244;padding-top:15px;width:100%;max-width:300px;">Please deploy a valid license.lic to restore access.</div>
+        </div>
+      ''';
+      throw Exception("License check failed: $errorMessage");
+    }
+  }
+
   Future<void> init(String appType) async {
     Completer completer = Completer();
-    context["onInitFinished"] = () {
-      completer.complete();
+    context["onInitFinished"] = () async {
+      try {
+        await _initializeLicenseBlocking();
+        completer.complete();
+      } catch (e) {
+        completer.completeError(e);
+      }
     };
     context['dialog'] = (type, title, text) {
       final uuid = Uuid();
