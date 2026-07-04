@@ -1396,7 +1396,8 @@ class FfiModel with ChangeNotifier {
       final platformAdditions = evt['platform_additions'];
       if (platformAdditions != null && platformAdditions != '') {
         try {
-          _pi.platformAdditions = json.decode(platformAdditions);
+          _pi.platformAdditions =
+              (json.decode(platformAdditions) as Map<String, dynamic>?) ?? {};
         } catch (e) {
           debugPrint('Failed to decode platformAdditions $e');
         }

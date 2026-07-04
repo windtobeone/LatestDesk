@@ -257,8 +257,10 @@ class RustdeskImpl {
 
   Future<String?> sessionGetViewStyle(
       {required UuidValue sessionId, dynamic hint}) {
-    return Future(() =>
-        js.context.callMethod('getByName', ['option:session', 'view_style']));
+    return Future(() {
+      final val = js.context.callMethod('getByName', ['option:session', 'view_style']);
+      return (val == null || val == '') ? null : val.toString();
+    });
   }
 
   Future<void> sessionSetViewStyle(
@@ -276,13 +278,15 @@ class RustdeskImpl {
 
   Future<void> sessionSetTrackpadSpeed(
       {required UuidValue sessionId, required int value, dynamic hint}) {
-    throw UnimplementedError("sessionSetTrackpadSpeed");
+    throw UnimplementedError("sessionSetTrackpeed");
   }
 
   Future<String?> sessionGetScrollStyle(
       {required UuidValue sessionId, dynamic hint}) {
-    return Future(() =>
-        js.context.callMethod('getByName', ['option:session', 'scroll_style']));
+    return Future(() {
+      final val = js.context.callMethod('getByName', ['option:session', 'scroll_style']);
+      return (val == null || val == '') ? null : val.toString();
+    });
   }
 
   Future<void> sessionSetScrollStyle(
