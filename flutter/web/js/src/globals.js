@@ -182,6 +182,7 @@ export function decrypt(signed, nonce, key) {
 }
 
 window.setByName = (name, value) => {
+  console.log("FFI setByName called:", name, "value:", value);
   switch (name) {
     case 'session_start':
       try {
@@ -324,6 +325,7 @@ function getPeersForDart() {
 }
 
 function _getByName(name, arg) {
+  console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
     case 'options':
       const options = {};
