@@ -7,12 +7,8 @@ import * as globals from "./globals";
 import { decompress, mapKey, sleep } from "./common";
 
 const PORT = 21116;
-const HOSTS = [
-  "rs-sg.rustdesk.com",
-  "rs-cn.rustdesk.com",
-  "rs-us.rustdesk.com",
-];
-let HOST = localStorage.getItem("rendezvous-server") || HOSTS[0];
+const HOSTS: string[] = [];
+let HOST = localStorage.getItem("rendezvous-server") || (typeof window !== "undefined" ? window.location.hostname : "");
 const SCHEMA = "ws://";
 
 type MsgboxCallback = (type: string, title: string, text: string) => void;
