@@ -331,9 +331,14 @@ function _getByName(name, arg) {
   console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
     case 'option:session':
-      if (!curConn) return null;
+      if (!curConn) {
+        console.log("DEBUG option:session", arg, "curConn is null, returning null");
+        return null;
+      }
       const val = curConn.getOption(arg);
-      return val === "" ? null : val;
+      const retVal = (val === "" || val === undefined || val === null) ? null : val;
+      console.log("DEBUG option:session", arg, "val is:", JSON.stringify(val), "returning:", retVal);
+      return retVal;
     case 'api_server':
       let rsv = localStorage.getItem("custom-rendezvous-server") || "";
       if (rsv.indexOf(":") > 0) {
