@@ -291,6 +291,7 @@ window.setByName = (name, value) => {
       }
       curConn.inputMouse(mask, parseInt(value.x || '0'), parseInt(value.y || '0'), value.alt == 'true', value.ctrl == 'true', value.shift == 'true', value.command == 'true');
       break;
+    case 'option:local':
     case 'option':
       value = JSON.parse(value);
       localStorage.setItem(value.name, value.value);
