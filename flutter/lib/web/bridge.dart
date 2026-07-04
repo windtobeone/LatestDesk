@@ -937,7 +937,7 @@ class RustdeskImpl {
     // export const CONFIG_INPUT_SOURCE_1 = "Input source 1";
     // // flutter grab mode
     // export const CONFIG_INPUT_SOURCE_2 = "Input source 2";
-    return inputSource != '' ? inputSource : 'Input source 1';
+    return inputSource != '' ? inputSource : 'Input source 2';
   }
 
   Future<void> mainSetInputSource(
