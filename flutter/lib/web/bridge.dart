@@ -278,7 +278,7 @@ class RustdeskImpl {
 
   Future<void> sessionSetTrackpadSpeed(
       {required UuidValue sessionId, required int value, dynamic hint}) {
-    throw UnimplementedError("sessionSetTrackpeed");
+    throw UnimplementedError("sessionSetTrackpadSpeed");
   }
 
   Future<String?> sessionGetScrollStyle(
