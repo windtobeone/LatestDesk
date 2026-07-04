@@ -74,7 +74,7 @@ export function draw(frame) {
     for (let i = 0; i < size; i += row) {
       flipPixels.set(pixels.subarray(i, i + row), end - i);
     }
-    onRgba(flipPixels);
+    onRgba(0, flipPixels);
     testSpeed[1] += new Date().getTime() - tm0;
     testSpeed[0] += 1;
     if (testSpeed[0] > 30) {
@@ -368,7 +368,7 @@ export function playAudio(packet) {
 window.init = async () => {
   if (yuvWorker) {
     yuvWorker.onmessage = (e) => {
-      onRgba(e.data);
+      onRgba(0, e.data);
     }
   }
   opusWorker.onmessage = (e) => {
