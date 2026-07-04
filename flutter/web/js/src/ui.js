@@ -31,16 +31,17 @@ if (app) {
   let player;
   window.init();
 
-  document.body.onload = () => {
+  const initUI = () => {
     const host = document.querySelector('#host');
-    host.value = localStorage.getItem('custom-rendezvous-server');
+    if (host) host.value = localStorage.getItem('custom-rendezvous-server') || '';
     const id = document.querySelector('#id');
-    id.value = localStorage.getItem('id');
+    if (id) id.value = localStorage.getItem('id') || '';
     const key = document.querySelector('#key');
-    key.value = localStorage.getItem('key');
-    player = YUVCanvas.attach(document.getElementById('player'));
-    // globals.sendOffCanvas(document.getElementById('player'));
+    if (key) key.value = localStorage.getItem('key') || '';
+    const playerEl = document.getElementById('player');
+    if (playerEl) player = YUVCanvas.attach(playerEl);
   };
+  initUI();
 
   window.connect = () => {
     const host = document.querySelector('#host');

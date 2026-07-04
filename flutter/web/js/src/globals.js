@@ -179,6 +179,16 @@ export function decrypt(signed, nonce, key) {
 
 window.setByName = (name, value) => {
   switch (name) {
+    case 'options':
+      try {
+        const opts = JSON.parse(value);
+        for (const [k, v] of Object.entries(opts)) {
+          localStorage.setItem(k, v);
+        }
+      } catch (e) {
+        console.error("setByName('options') error:", e);
+      }
+      break;
     case 'remote_id':
       localStorage.setItem('remote-id', value);
       break;
@@ -290,6 +300,13 @@ function getPeersForDart() {
 
 function _getByName(name, arg) {
   switch (name) {
+    case 'options':
+      const options = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        options[k] = localStorage.getItem(k);
+      }
+      return options;
     case 'peers':
       return getPeersForDart();
     case 'remote_id':
