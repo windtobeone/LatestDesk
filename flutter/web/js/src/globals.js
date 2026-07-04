@@ -327,6 +327,15 @@ function getPeersForDart() {
 function _getByName(name, arg) {
   console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
+    case 'get_conn_status':
+      const statusNum = curConn ? (curConn._firstFrame ? 1 : 0) : -1;
+      const status = {
+        status_num: statusNum,
+        video_conn_count: curConn ? 1 : 0
+      };
+      return JSON.stringify(status);
+    case 'is_using_public_server':
+      return 'false';
     case 'options':
       const options = {};
       for (let i = 0; i < localStorage.length; i++) {
