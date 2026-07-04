@@ -362,6 +362,7 @@ function _getByName(name, arg) {
       return curConn.getRemember();
     case 'toggle_option':
       return curConn.getOption(arg) || false;
+    case 'option:local':
     case 'option':
       return localStorage.getItem(arg);
     case 'image_quality':
