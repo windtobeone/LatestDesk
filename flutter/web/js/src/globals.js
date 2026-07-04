@@ -330,6 +330,10 @@ function getPeersForDart() {
 function _getByName(name, arg) {
   console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
+    case 'option:session':
+      if (!curConn) return undefined;
+      const val = curConn.getOption(arg);
+      return val === "" ? undefined : val;
     case 'api_server':
       let rsv = localStorage.getItem("custom-rendezvous-server") || "";
       if (rsv.indexOf(":") > 0) {
