@@ -179,6 +179,27 @@ export function decrypt(signed, nonce, key) {
 
 window.setByName = (name, value) => {
   switch (name) {
+    case 'session_start':
+      try {
+        const info = JSON.parse(value);
+        newConn();
+        startConn(info.id);
+      } catch (e) {
+        console.error("session_start error:", e);
+      }
+      break;
+    case 'session_add_sync':
+      try {
+        const info = JSON.parse(value);
+        const conn = newConn();
+        conn._id = info.id;
+      } catch (e) {
+        console.error("session_add_sync error:", e);
+      }
+      break;
+    case 'session_close':
+      close();
+      break;
     case 'options':
       try {
         const opts = JSON.parse(value);
