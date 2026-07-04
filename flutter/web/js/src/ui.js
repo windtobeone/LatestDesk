@@ -70,7 +70,7 @@ if (app) {
     func();
   }
 
-  function msgbox(type, title, text) {
+  const msgbox = (type, title, text) => {
     if (!globals.getConn()) return;
     if (type == 'input-password') {
       document.querySelector('div#status').style.display = 'none';
