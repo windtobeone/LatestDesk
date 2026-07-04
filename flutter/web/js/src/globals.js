@@ -37,6 +37,8 @@ function jsonfyForDart(payload) {
     if (!key) continue;
     if (value === null || value === undefined || (key === 'platform_additions' && !value)) {
       tmp[key] = '';
+    } else if (key === 'platform_additions') {
+      tmp[key] = value;
     } else {
       tmp[key] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
     }
