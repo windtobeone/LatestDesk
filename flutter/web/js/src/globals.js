@@ -329,6 +329,15 @@ function getPeersForDart() {
 function _getByName(name, arg) {
   console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
+    case 'api_server':
+      let rsv = localStorage.getItem("custom-rendezvous-server") || "";
+      if (rsv.indexOf(":") > 0) {
+        rsv = rsv.split(":")[0];
+      }
+      if (!rsv) {
+        rsv = "127.0.0.1";
+      }
+      return "http://" + rsv + ":21114";
     case 'get_conn_status':
       const statusNum = curConn ? (curConn._firstFrame ? 1 : 0) : -1;
       const status = {
