@@ -1054,7 +1054,7 @@ class RustdeskImpl {
   }
 
   Future<void> mainLoadLanPeers({dynamic hint}) {
-    throw UnimplementedError("mainLoadLanPeers");
+    return Future.value();
   }
 
   Future<void> mainRemoveDiscovered({required String id, dynamic hint}) {
