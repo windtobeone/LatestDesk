@@ -235,6 +235,9 @@ export default class Connection {
   async msgLoop() {
     while (true) {
       const msg = (await this._ws?.next()) as message.Message;
+      if (msg) {
+        console.log("FFI msgLoop received message keys:", Object.keys(msg));
+      }
       if (msg?.hash) {
         this._hash = msg?.hash;
         if (!this._password)
@@ -421,6 +424,9 @@ export default class Connection {
   }
 
   handleVideoFrame(vf: message.VideoFrame) {
+    if (this._videoTestSpeed[0] % 30 === 0) {
+      console.log("FFI handleVideoFrame keys:", Object.keys(vf), "has vp9s:", !!vf.vp9s, "has av1s:", !!vf.av1s);
+    }
     if (!this._firstFrame) {
       this.msgbox("", "", "");
       this._firstFrame = true;

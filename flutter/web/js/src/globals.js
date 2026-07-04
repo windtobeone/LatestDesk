@@ -47,7 +47,8 @@ let oldSize;
 if (YUVCanvas.WebGLFrameSink.isAvailable()) {
   var canvas = document.createElement('canvas');
   yuvCanvas = YUVCanvas.attach(canvas, { webGL: true });
-  gl = canvas.getContext("webgl");
+  gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+  console.log("FFI WebGL context initialized:", gl);
 } else {
   yuvWorker = new Worker("./yuv.js");
 }
@@ -69,6 +70,9 @@ export function draw(frame) {
       oldSize = size;
     }
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    if (testSpeed[0] % 30 === 0) {
+      console.log("FFI draw frame size:", width, "x", height, "first 16 bytes:", pixels.subarray(0, 16));
+    }
     const row = width * 4;
     const end = (height - 1) * row;
     for (let i = 0; i < size; i += row) {
