@@ -24,6 +24,7 @@ export default class Websock {
     this._uri = uri;
     this._status = "";
     this._buf = [];
+    console.log("FFI WebSock connecting to:", uri);
     this._websocket = new WebSocket(uri);
     this._websocket.onmessage = this._recv_message.bind(this);
     this._websocket.binaryType = "arraybuffer";
