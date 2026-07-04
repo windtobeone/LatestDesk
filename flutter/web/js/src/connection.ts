@@ -757,6 +757,7 @@ function getrUriFromRs(
   isRelay: Boolean = false,
   roffset: number = 0
 ): string {
+  uri = uri.replace(/^(https?|wss?):\/\//i, "");
   if (uri.indexOf(":") > 0) {
     const tmp = uri.split(":");
     const port = parseInt(tmp[1]);
