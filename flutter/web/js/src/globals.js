@@ -115,7 +115,7 @@ export function getConn() {
 }
 
 export async function startConn(id) {
-  setByName('remote_id', id);
+  window.setByName('remote_id', id);
   await curConn.start(id);
 }
 
