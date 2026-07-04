@@ -21,7 +21,7 @@ export function msgbox(type, title, text) {
   if (!type || (type == 'error' && !text)) return;
   const text2 = text.toLowerCase();
   var hasRetry = checkIfRetry(type, title, text) ? 'true' : '';
-  onGlobalEvent(JSON.stringify({ name: 'msgbox', type, title, text, hasRetry }));
+  onGlobalEvent(JSON.stringify({ name: 'msgbox', type, title, text, link: '', hasRetry }));
 }
 
 function jsonfyForDart(payload) {
