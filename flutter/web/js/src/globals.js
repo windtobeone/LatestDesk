@@ -35,7 +35,7 @@ function jsonfyForDart(payload) {
   var tmp = {};
   for (const [key, value] of Object.entries(payload)) {
     if (!key) continue;
-    if (value === null || value === undefined) {
+    if (value === null || value === undefined || (key === 'platform_additions' && !value)) {
       tmp[key] = '';
     } else {
       tmp[key] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
@@ -342,11 +342,7 @@ function _getByName(name, arg) {
   console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
     case 'option:session':
-      if (!curConn) {
-        console.log("DEBUG option:session", arg, "curConn is null, returning null");
-        return null;
-      }
-      const val = curConn.getOption(arg);
+      const val = curConn ? curConn.getOption(arg) : null;
       let retVal = (val === "" || val === undefined || val === null) ? null : val;
       if (arg === 'view_style' && !retVal) {
         retVal = 'adaptive';
