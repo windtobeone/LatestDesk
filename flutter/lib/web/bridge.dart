@@ -356,14 +356,13 @@ class RustdeskImpl {
   }
 
   Future<Int32List?> sessionGetCustomImageQuality(
-      {required UuidValue sessionId, dynamic hint}) {
+      {required UuidValue sessionId, dynamic hint}) async {
     try {
-      return Future(() => Int32List.fromList([
-            int.parse(js.context.callMethod(
-                'getByName', ['option:session', 'custom_image_quality']))
-          ]));
+      final res = js.context.callMethod(
+          'getByName', ['option:session', 'custom_image_quality']);
+      return Int32List.fromList([int.parse(res)]);
     } catch (e) {
-      return Future.value(null);
+      return null;
     }
   }
 

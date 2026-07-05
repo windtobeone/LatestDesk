@@ -39,6 +39,8 @@ function jsonfyForDart(payload) {
       tmp[key] = '';
     } else if (key === 'platform_additions') {
       tmp[key] = value;
+    } else if (typeof value === 'string') {
+      tmp[key] = value;
     } else {
       tmp[key] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
     }
@@ -58,8 +60,9 @@ let gl;
 let pixels;
 let flipPixels;
 let oldSize;
+export let canvas;
 if (YUVCanvas.WebGLFrameSink.isAvailable()) {
-  var canvas = document.createElement('canvas');
+  canvas = document.createElement('canvas');
   yuvCanvas = YUVCanvas.attach(canvas, { webGL: true });
   gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
   console.log("FFI WebGL context initialized:", gl);
@@ -67,8 +70,38 @@ if (YUVCanvas.WebGLFrameSink.isAvailable()) {
   yuvWorker = new Worker("./yuv.js");
 }
 let testSpeed = [0, 0];
+let lastWidth = 0;
+let lastHeight = 0;
 
 export function draw(frame) {
+  const displayWidth = frame.format.displayWidth;
+  const displayHeight = frame.format.displayHeight;
+  if (displayWidth !== lastWidth || displayHeight !== lastHeight) {
+    lastWidth = displayWidth;
+    lastHeight = displayHeight;
+    console.log("[globals.js] Display size changed to:", displayWidth, "x", displayHeight, "pushing sync_peer_info");
+    const displays = [{
+      width: displayWidth,
+      height: displayHeight,
+      x: 0,
+      y: 0,
+      cursor_embedded: 0
+    }];
+    pushEvent("sync_peer_info", { displays });
+    if (YUVCanvas.WebGLFrameSink.isAvailable()) {
+      try {
+        canvas = document.createElement('canvas');
+        canvas.width = displayWidth;
+        canvas.height = displayHeight;
+        yuvCanvas = YUVCanvas.attach(canvas, { webGL: true });
+        gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        console.log("[globals.js] WebGL FrameSink re-initialized for new resolution:", displayWidth, "x", displayHeight);
+      } catch (e) {
+        console.error("[globals.js] Error re-initializing WebGL FrameSink:", e);
+      }
+    }
+  }
+
   if (yuvWorker) {
     // frame's (y/u/v).bytes already detached, can not transferrable any more.
     yuvWorker.postMessage(frame);
@@ -196,8 +229,8 @@ export function decrypt(signed, nonce, key) {
   return sodium.crypto_secretbox_open_easy(signed, makeOnce(nonce), key);
 }
 
-window.setByName = (name, value) => {
-  console.log("FFI setByName called:", name, "value:", value);
+window.setByName = (name, value, value2) => {
+  console.log("FFI setByName called:", name, "value:", value, "value2:", value2);
   switch (name) {
     case 'session_start':
       try {
@@ -251,8 +284,85 @@ window.setByName = (name, value) => {
     case 'reconnect':
       curConn.reconnect();
       break;
+    case 'option:toggle':
     case 'toggle_option':
-      curConn.toggleOption(value);
+      if (curConn) curConn.toggleOption(value);
+      break;
+    case 'option:session':
+      try {
+        if (value2 !== undefined) {
+          if (curConn) {
+            curConn.setOption(value, value2);
+          }
+        } else {
+          const opt = JSON.parse(value);
+          if (curConn) {
+            curConn.setOption(opt.name, opt.value);
+          }
+        }
+      } catch (e) {
+        console.error("setByName('option:session') error:", e);
+      }
+      break;
+    case 'option:peer':
+    case 'peer_option':
+      try {
+        const opt = JSON.parse(value);
+        const peerId = opt.id || (curConn ? curConn._id : '');
+        if (peerId) {
+          const peers = getPeers();
+          if (!peers[peerId]) {
+            peers[peerId] = {};
+          }
+          if (opt.value === undefined || opt.value === null) {
+            delete peers[peerId][opt.name];
+          } else {
+            peers[peerId][opt.name] = opt.value;
+          }
+          peers[peerId]["tm"] = new Date().getTime();
+          localStorage.setItem("peers", JSON.stringify(peers));
+          if (curConn && curConn._id === peerId) {
+            curConn._options = peers[peerId];
+          }
+        }
+      } catch (e) {
+        console.error("setByName('option:peer') error:", e);
+      }
+      break;
+    case 'option:flutter:peer':
+    case 'option:flutter:local':
+    case 'option:user:default':
+      try {
+        const opt = JSON.parse(value);
+        localStorage.setItem(opt.name, opt.value);
+      } catch (e) {
+        console.error(`setByName('${name}') error:`, e);
+      }
+      break;
+    case 'custom_image_quality':
+    case 'custom-fps':
+      if (curConn) curConn.setOption(name, value);
+      break;
+    case 'toggle_privacy_mode':
+      try {
+        const opt = JSON.parse(value);
+        if (curConn) {
+          curConn.toggleOption('privacy-mode');
+        }
+      } catch (e) {
+        console.error("setByName('toggle_privacy_mode') error:", e);
+      }
+      break;
+    case 'fullscreen':
+      localStorage.setItem('fullscreen', value);
+      break;
+    case 'envvar':
+      try {
+        const opt = JSON.parse(value);
+        localStorage.setItem(`envvar:${opt.name}`, opt.value);
+      } catch (e) {
+        console.error("setByName('envvar') error:", e);
+      }
       break;
     case 'image_quality':
       curConn.setImageQuality(value);
@@ -265,6 +375,16 @@ window.setByName = (name, value) => {
       break;
     case 'switch_display':
       curConn.switchDisplay(value);
+      break;
+    case 'change_resolution':
+      try {
+        const res = JSON.parse(value);
+        if (curConn) {
+          curConn.changeResolution(res.width, res.height);
+        }
+      } catch (e) {
+        console.error("setByName('change_resolution') error:", e);
+      }
       break;
     case 'remove':
       const peers = getPeers();
@@ -309,10 +429,6 @@ window.setByName = (name, value) => {
       value = JSON.parse(value);
       localStorage.setItem(value.name, value.value);
       break;
-    case 'peer_option':
-      value = JSON.parse(value);
-      curConn.setOption(value.name, value.value);
-      break;
     case 'input_os_password':
       curConn.inputOsPassword(value);
       break;
@@ -343,6 +459,10 @@ function getPeersForDart() {
 function _getByName(name, arg) {
   console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
+    case 'session_verify_license':
+      return JSON.stringify({ status: "ok", message: "Verified" });
+    case 'license_status':
+      return 'ok';
     case 'option:session':
       const val = curConn ? curConn.getOption(arg) : null;
       let retVal = (val === "" || val === undefined || val === null) ? null : val;
@@ -385,8 +505,35 @@ function _getByName(name, arg) {
       return localStorage.getItem('remote-id');
     case 'remember':
       return curConn.getRemember();
+    case 'option:toggle':
     case 'toggle_option':
-      return curConn.getOption(arg) || false;
+      return curConn ? (curConn.getOption(arg) || false) : false;
+    case 'option:peer':
+    case 'peer_option':
+      try {
+        let peerId = '';
+        let optName = arg;
+        if (arg.indexOf('{') === 0) {
+          const parsed = JSON.parse(arg);
+          peerId = parsed.id;
+          optName = parsed.name;
+        } else {
+          peerId = curConn ? curConn._id : '';
+        }
+        if (peerId) {
+          const peers = getPeers();
+          return (peers[peerId] && peers[peerId][optName]) || '';
+        }
+      } catch (e) {
+        console.error("getByName('option:peer') error:", e);
+      }
+      return '';
+    case 'option:flutter:peer':
+    case 'option:flutter:local':
+    case 'option:user:default':
+      return localStorage.getItem(arg) || '';
+    case 'envvar':
+      return localStorage.getItem(`envvar:${arg}`) || '';
     case 'option:local':
     case 'option':
       return localStorage.getItem(arg);
@@ -395,8 +542,6 @@ function _getByName(name, arg) {
     case 'translate':
       arg = JSON.parse(arg);
       return translate(arg.locale, arg.text);
-    case 'peer_option':
-      return curConn.getOption(arg);
     case 'test_if_valid_server':
       break;
     case 'version':
@@ -474,3 +619,10 @@ export function copyToClipboard(text) {
     }
   }
 }
+
+window.addEventListener('error', (event) => {
+  console.log("!!! UNHANDLED ERROR:", event.error ? event.error.stack : event.message);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  console.log("!!! UNHANDLED REJECTION:", event.reason);
+});

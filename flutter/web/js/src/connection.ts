@@ -17,7 +17,24 @@ const SCHEMA = "ws://";
 
 type MsgboxCallback = (type: string, title: string, text: string) => void;
 type DrawCallback = (data: Uint8Array) => void;
-//const cursorCanvas = document.createElement("canvas");
+let iframeViewOnly = false;
+let iframeDisableAudio = false;
+const cursorCanvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+
+if (typeof window !== "undefined") {
+  window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (data && data.type === 'INIT_CONN') {
+      console.log("[JS Bridge] Received INIT_CONN message:", data);
+      if (data.viewOnly !== undefined) {
+        iframeViewOnly = !!data.viewOnly;
+      }
+      if (data.disableAudio !== undefined) {
+        iframeDisableAudio = !!data.disableAudio;
+      }
+    }
+  });
+}
 
 export default class Connection {
   _msgs: any[];
@@ -33,7 +50,95 @@ export default class Connection {
   _password: Uint8Array | undefined;
   _options: any;
   _videoTestSpeed: number[];
+  _display: number;
+  _rawPassword: string | undefined;
   //_cursors: { [name: number]: any };
+
+  isViewOnly(): boolean {
+    if (iframeViewOnly) {
+      return true;
+    }
+    try {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      if (hash.indexOf('view_only=1') >= 0 || hash.indexOf('view-only=1') >= 0 ||
+          search.indexOf('view_only=1') >= 0 || search.indexOf('view-only=1') >= 0) {
+        return true;
+      }
+    } catch (e) {}
+
+    try {
+      const v = this.getOption('view_only') || this.getOption('view-only');
+      if (v === true || v === 'true' || v === 'Y' || v === '1') {
+        return true;
+      }
+    } catch (e) {}
+
+    return false;
+  }
+
+  getOrCreateRemoteCursor(): HTMLImageElement | null {
+    if (typeof document === "undefined") return null;
+    let el = document.getElementById("remote-cursor") as HTMLImageElement;
+    if (!el) {
+      el = document.createElement("img") as HTMLImageElement;
+      el.id = "remote-cursor";
+      el.style.position = "absolute";
+      el.style.zIndex = "999999";
+      el.style.pointerEvents = "none";
+      el.style.display = "none";
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  updateRemoteCursorPosition(pos: any) {
+    const el = this.getOrCreateRemoteCursor();
+    if (!el) return;
+
+    const showRemote = this._options["show-remote-cursor"] === true || this.isViewOnly();
+    const mainCanvas = globals.canvas;
+
+    if (!showRemote) {
+      el.style.display = "none";
+      return;
+    }
+
+    if (!mainCanvas) {
+      el.style.display = "none";
+      return;
+    }
+
+    const displayWidth = mainCanvas.width;
+    const displayHeight = mainCanvas.height;
+    if (!displayWidth || !displayHeight) {
+      el.style.display = "none";
+      return;
+    }
+
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+    const scale = Math.min(winW / displayWidth, winH / displayHeight);
+
+    const viewW = displayWidth * scale;
+    const viewH = displayHeight * scale;
+    const viewLeft = (winW - viewW) / 2;
+    const viewTop = (winH - viewH) / 2;
+
+    const screenX = viewLeft + (pos.x / displayWidth) * viewW;
+    const screenY = viewTop + (pos.y / displayHeight) * viewH;
+
+    const hotX = parseInt(el.dataset.hotx || "0") || 0;
+    const hotY = parseInt(el.dataset.hoty || "0") || 0;
+
+    const left = screenX - hotX * scale + (window.scrollX || 0);
+    const top = screenY - hotY * scale + (window.scrollY || 0);
+
+    el.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    el.style.left = "0px";
+    el.style.top = "0px";
+    el.style.display = "block";
+  }
 
   constructor() {
     this._msgbox = globals.msgbox;
@@ -41,7 +146,11 @@ export default class Connection {
     this._msgs = [];
     this._id = "";
     this._videoTestSpeed = [0, 0];
+    this._display = 0;
+    this._options = {};
     //this._cursors = {};
+    this._rawPassword = sessionStorage.getItem('WASM_CONN_PASSWORD') || undefined;
+    console.log("[Connection] Loaded raw password from sessionStorage:", this._rawPassword ? "********" : "none");
   }
 
   async start(id: string) {
@@ -264,7 +373,16 @@ export default class Connection {
           }
         } else if (r.peer_info) {
           this.handlePeerInfo(r.peer_info);
+          setTimeout(() => {
+            try { this.inputMouse(0, 0, 0); } catch(e){}
+          }, 500);
         }
+      } else if (msg?.peer_info) {
+        console.log("[JS] Received peer_info in msgLoop:", msg.peer_info);
+        this.handlePeerInfo(msg.peer_info);
+        setTimeout(() => {
+          try { this.inputMouse(0, 0, 0); } catch(e){}
+        }, 500);
       } else if (msg?.video_frame) {
         this.handleVideoFrame(msg?.video_frame!);
       } else if (msg?.clipboard) {
@@ -286,33 +404,32 @@ export default class Connection {
         if (!c) continue;
         cd.colors = c;
         globals.pushEvent("cursor_data", cd);
-        /*
-        let ctx = cursorCanvas.getContext("2d");
-        cursorCanvas.width = cd.width;
-        cursorCanvas.height = cd.height;
-        let imgData = new ImageData(
-          new Uint8ClampedArray(c),
-          cd.width,
-          cd.height
-        );
-        ctx?.clearRect(0, 0, cd.width, cd.height);
-        ctx?.putImageData(imgData, 0, 0);
-        let url = cursorCanvas.toDataURL();
-        const img = document.createElement("img");
-        img.src = url;
-        this._cursors[cd.id] = img;
-        //cursorCanvas.width /= 2.;
-        //cursorCanvas.height /= 2.;
-        //ctx?.drawImage(img, cursorCanvas.width, cursorCanvas.height);
-        url = cursorCanvas.toDataURL();
-        document.body.style.cursor =
-          "url(" + url + ")" + cd.hotx + " " + cd.hoty + ", default";
-        console.log(document.body.style.cursor);
-        */
+        if (cursorCanvas) {
+          let ctx = cursorCanvas.getContext("2d");
+          cursorCanvas.width = cd.width;
+          cursorCanvas.height = cd.height;
+          let imgData = new ImageData(
+            new Uint8ClampedArray(c),
+            cd.width,
+            cd.height
+          );
+          ctx?.clearRect(0, 0, cd.width, cd.height);
+          ctx?.putImageData(imgData, 0, 0);
+          let url = cursorCanvas.toDataURL();
+          const el = this.getOrCreateRemoteCursor();
+          if (el) {
+            el.src = url;
+            el.dataset.hotx = cd.hotx.toString();
+            el.dataset.hoty = cd.hoty.toString();
+            el.dataset.width = cd.width.toString();
+            el.dataset.height = cd.height.toString();
+          }
+        }
       } else if (msg?.cursor_id) {
         globals.pushEvent("cursor_id", { id: msg?.cursor_id });
       } else if (msg?.cursor_position) {
         globals.pushEvent("cursor_position", msg?.cursor_position);
+        this.updateRemoteCursorPosition(msg.cursor_position);
       } else if (msg?.misc) {
         if (!this.handleMisc(msg?.misc)) break;
       } else if (msg?.audio_frame) {
@@ -335,6 +452,10 @@ export default class Connection {
     clearInterval(this._interval);
     this._ws?.close();
     this._videoDecoder?.close();
+    if (typeof document !== "undefined") {
+      const el = document.getElementById("remote-cursor");
+      if (el) el.style.display = "none";
+    }
   }
 
   refresh() {
@@ -395,10 +516,8 @@ export default class Connection {
       msg.image_quality = q;
       n += 1;
     }
-    if (this._options["show-remote-cursor"]) {
-      msg.show_remote_cursor = yes;
-      n += 1;
-    }
+    msg.show_remote_cursor = yes;
+    n += 1;
     if (this._options["lock-after-session-end"]) {
       msg.lock_after_session_end = yes;
       n += 1;
@@ -543,19 +662,33 @@ export default class Connection {
   }
 
   getOption(name: string): any {
+    if (!this._options) {
+      this._options = {};
+    }
+    if (this._id && Object.keys(this._options).length === 0) {
+      this._options = globals.getPeers()[this._id] || {};
+    }
     return this._options[name];
   }
 
   setOption(name: string, value: any) {
+    if (!this._options) {
+      this._options = {};
+    }
+    if (this._id && Object.keys(this._options).length === 0) {
+      this._options = globals.getPeers()[this._id] || {};
+    }
     if (value == undefined) {
       delete this._options[name];
     } else {
       this._options[name] = value;
     }
     this._options["tm"] = new Date().getTime();
-    const peers = globals.getPeers();
-    peers[this._id] = this._options;
-    localStorage.setItem("peers", JSON.stringify(peers));
+    if (this._id) {
+      const peers = globals.getPeers();
+      peers[this._id] = this._options;
+      localStorage.setItem("peers", JSON.stringify(peers));
+    }
   }
 
   inputKey(
@@ -567,6 +700,7 @@ export default class Connection {
     shift: Boolean,
     command: Boolean
   ) {
+    if (this.isViewOnly()) return;
     const key_event = mapKey(name, globals.isDesktop());
     if (!key_event) return;
     if (alt && (name == "VK_MENU" || name == "RAlt")) {
@@ -588,6 +722,7 @@ export default class Connection {
   }
 
   ctrlAltDel() {
+    if (this.isViewOnly()) return;
     const key_event = message.KeyEvent.fromPartial({ down: true });
     if (this._peerInfo?.platform == "Windows") {
       key_event.control_key = message.ControlKey.CtrlAltDel;
@@ -599,17 +734,30 @@ export default class Connection {
   }
 
   inputString(seq: string) {
+    if (this.isViewOnly()) return;
     const key_event = message.KeyEvent.fromPartial({ seq });
     this._ws?.sendMessage({ key_event });
   }
 
   switchDisplay(display: number) {
+    this._display = display;
     const switch_display = message.SwitchDisplay.fromPartial({ display });
     const misc = message.Misc.fromPartial({ switch_display });
     this._ws?.sendMessage({ misc });
   }
 
+  changeResolution(width: number, height: number) {
+    const display = this._display !== undefined ? this._display : 0;
+    console.log("[Connection] changeResolution called, sending resolution:", width, "x", height, "display:", display);
+    const resolution = message.Resolution.fromPartial({ width, height });
+    const change_display_resolution = message.DisplayResolution.fromPartial({ display, resolution });
+    const change_resolution = resolution;
+    const misc = message.Misc.fromPartial({ change_resolution, change_display_resolution });
+    this._ws?.sendMessage({ misc });
+  }
+
   async inputOsPassword(seq: string) {
+    if (this.isViewOnly()) return;
     this.inputMouse();
     await sleep(50);
     this.inputMouse(0, 3, 3);
@@ -622,6 +770,7 @@ export default class Connection {
   }
 
   lockScreen() {
+    if (this.isViewOnly()) return;
     const key_event = message.KeyEvent.fromPartial({
       down: true,
       control_key: message.ControlKey.LockScreen,
@@ -647,6 +796,7 @@ export default class Connection {
     shift: Boolean = false,
     command: Boolean = false
   ) {
+    if (this.isViewOnly() && mask !== 0) return;
     const mouse_event = message.MouseEvent.fromPartial({
       mask,
       x,
@@ -657,11 +807,18 @@ export default class Connection {
   }
 
   toggleOption(name: string) {
+    if (!this._options) {
+      this._options = {};
+    }
+    if (this._id && Object.keys(this._options).length === 0) {
+      this._options = globals.getPeers()[this._id] || {};
+    }
     const v = !this._options[name];
     const option = message.OptionMessage.fromPartial({});
     const v2 = v
       ? message.OptionMessage_BoolOption.Yes
       : message.OptionMessage_BoolOption.No;
+    let needSend = true;
     switch (name) {
       case "show-remote-cursor":
         option.show_remote_cursor = v2;
@@ -684,12 +841,18 @@ export default class Connection {
       case "unblock-input":
         option.block_input = message.OptionMessage_BoolOption.No;
         break;
+      case "view-only":
+      case "view_only":
+        needSend = false;
+        break;
       default:
         return;
     }
     if (name.indexOf("block-input") < 0) this.setOption(name, v);
-    const misc = message.Misc.fromPartial({ option });
-    this._ws?.sendMessage({ misc });
+    if (needSend) {
+      const misc = message.Misc.fromPartial({ option });
+      this._ws?.sendMessage({ misc });
+    }
   }
 
   getImageQuality() {
