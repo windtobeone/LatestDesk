@@ -148,60 +148,6 @@ export default class Connection {
     //this._cursors = {};
   }
 
-  getCommKey(useDefault: boolean = false): string | undefined {
-    let key = localStorage.getItem("key") || undefined;
-    console.log("[getCommKey] localStorage key:", key);
-    if (!key || key === "null" || key === "undefined") {
-      key = sessionStorage.getItem('WASM_COMM_KEY') || undefined;
-      console.log("[getCommKey] sessionStorage key:", key);
-      if (!key) {
-        try {
-          const hash = window.location.hash;
-          console.log("[getCommKey] window.location.hash:", hash);
-          const qIndex = hash.indexOf('?');
-          if (qIndex !== -1) {
-            const hashParams = new URLSearchParams(hash.substring(qIndex));
-            key = hashParams.get("key") || undefined;
-            console.log("[getCommKey] parsed key from hash:", key);
-          }
-        } catch (e) {
-          console.error("Failed to parse key from URL hash fallback: ", e);
-        }
-      }
-    }
-    if (key && key !== "null" && key !== "undefined") {
-      key = key.trim();
-      // Mathematically normalize base64url/no-pad to standard padded base64
-      key = key.replace(/-/g, '+').replace(/_/g, '/');
-      while (key.length % 4 !== 0) {
-        key += '=';
-      }
-      console.log("[getCommKey] final self-healed key returned:", key);
-      return key;
-    }
-    console.log("[getCommKey] returning default key:", useDefault ? "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=" : undefined);
-    return useDefault ? "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=" : undefined;
-  }
-
-  getAccessToken(): string | undefined {
-    let token = localStorage.getItem("access_token") || undefined;
-    if (!token || token === "null" || token === "undefined") {
-      token = sessionStorage.getItem('WASM_ACCESS_TOKEN') || undefined;
-      if (!token) {
-        try {
-          const hash = window.location.hash;
-          const qIndex = hash.indexOf('?');
-          if (qIndex !== -1) {
-            const hashParams = new URLSearchParams(hash.substring(qIndex));
-            token = hashParams.get("token") || undefined;
-          }
-        } catch (e) {
-          console.error("Failed to parse token from URL hash fallback: ", e);
-        }
-      }
-    }
-    return token;
-  }
 
   async start(id: string) {
     try {
@@ -255,10 +201,10 @@ export default class Connection {
     const nat_type = rendezvous.NatType.SYMMETRIC;
     const punch_hole_request = rendezvous.PunchHoleRequest.fromPartial({
       id,
-      licence_key: this.getCommKey() || undefined,
+      licence_key: localStorage.getItem("key") || undefined,
       conn_type,
       nat_type,
-      token: this.getAccessToken() || undefined,
+      token: localStorage.getItem("access_token") || undefined,
     });
     ws.sendRendezvous({ punch_hole_request });
     const msg = (await ws.next()) as rendezvous.RendezvousMessage;
