@@ -608,6 +608,9 @@ function _getByName(name, arg) {
       return localStorage.getItem(`envvar:${arg}`) || '';
     case 'option:local':
     case 'option':
+      if (arg === 'is_monitor') {
+        return (typeof window !== 'undefined' && window.isMonitor) || 'N';
+      }
       return localStorage.getItem(arg);
     case 'image_quality':
       return curConn.getImageQuality();
