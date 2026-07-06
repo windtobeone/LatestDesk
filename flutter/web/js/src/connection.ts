@@ -145,8 +145,6 @@ export default class Connection {
     this._display = 0;
     this._options = {};
     //this._cursors = {};
-    this._rawPassword = sessionStorage.getItem('WASM_CONN_PASSWORD') || undefined;
-    console.log("[Connection] Loaded raw password from sessionStorage:", this._rawPassword ? "********" : "none");
   }
 
   async start(id: string) {
