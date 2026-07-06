@@ -257,7 +257,7 @@ export default class Connection {
     console.log(new Date() + ": Connected to relay server");
     this._ws = ws;
     const request_relay = rendezvous.RequestRelay.fromPartial({
-      licence_key: this.getCommKey() || undefined,
+      licence_key: localStorage.getItem("key") || undefined,
       uuid,
     });
     ws.sendRendezvous({ request_relay });
@@ -269,7 +269,7 @@ export default class Connection {
   async secure(pk: Uint8Array | undefined) {
     if (pk) {
       try {
-        pk = await globals.verify(pk, this.getCommKey(true) as string);
+        pk = await globals.verify(pk, (localStorage.getItem("key") || "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=") as string);
         if (pk) {
           const idpk = message.IdPk.decode(pk);
           if (idpk.id == this._id) {
