@@ -11,6 +11,10 @@ export default defineConfig({
     build: {
         manifest: false,
         rollupOptions: {
+            input: {
+                index: path.resolve(__dirname, 'index.html'),
+                'monitor-bootstrap': path.resolve(__dirname, 'src/monitor-bootstrap.ts')
+            },
             treeshake: false,
             output: {
                 entryFileNames: `[name].js`,

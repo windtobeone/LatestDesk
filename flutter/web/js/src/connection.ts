@@ -44,6 +44,7 @@ export default class Connection {
   _firstFrame: Boolean | undefined;
   _videoDecoder: any;
   _password: Uint8Array | undefined;
+  _rawPassword: string | undefined;
   _options: any;
   _videoTestSpeed: number[];
   _display: number;
@@ -147,8 +148,69 @@ export default class Connection {
     //this._cursors = {};
   }
 
+  getCommKey(useDefault: boolean = false): string | undefined {
+    let key = localStorage.getItem("key") || undefined;
+    console.log("[getCommKey] localStorage key:", key);
+    if (!key || key === "null" || key === "undefined") {
+      key = sessionStorage.getItem('WASM_COMM_KEY') || undefined;
+      console.log("[getCommKey] sessionStorage key:", key);
+      if (!key) {
+        try {
+          const hash = window.location.hash;
+          console.log("[getCommKey] window.location.hash:", hash);
+          const qIndex = hash.indexOf('?');
+          if (qIndex !== -1) {
+            const hashParams = new URLSearchParams(hash.substring(qIndex));
+            key = hashParams.get("key") || undefined;
+            console.log("[getCommKey] parsed key from hash:", key);
+          }
+        } catch (e) {
+          console.error("Failed to parse key from URL hash fallback: ", e);
+        }
+      }
+    }
+    if (key && key !== "null" && key !== "undefined") {
+      key = key.trim();
+      // Mathematically normalize base64url/no-pad to standard padded base64
+      key = key.replace(/-/g, '+').replace(/_/g, '/');
+      while (key.length % 4 !== 0) {
+        key += '=';
+      }
+      console.log("[getCommKey] final self-healed key returned:", key);
+      return key;
+    }
+    console.log("[getCommKey] returning default key:", useDefault ? "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=" : undefined);
+    return useDefault ? "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=" : undefined;
+  }
+
+  getAccessToken(): string | undefined {
+    let token = localStorage.getItem("access_token") || undefined;
+    if (!token || token === "null" || token === "undefined") {
+      token = sessionStorage.getItem('WASM_ACCESS_TOKEN') || undefined;
+      if (!token) {
+        try {
+          const hash = window.location.hash;
+          const qIndex = hash.indexOf('?');
+          if (qIndex !== -1) {
+            const hashParams = new URLSearchParams(hash.substring(qIndex));
+            token = hashParams.get("token") || undefined;
+          }
+        } catch (e) {
+          console.error("Failed to parse token from URL hash fallback: ", e);
+        }
+      }
+    }
+    return token;
+  }
+
   async start(id: string) {
     try {
+      if (id && id.indexOf('?') !== -1) {
+        id = id.split('?')[0];
+      }
+      if (id) {
+        id = id.trim();
+      }
       await this._start(id);
     } catch (e: any) {
       this.msgbox(
@@ -193,10 +255,10 @@ export default class Connection {
     const nat_type = rendezvous.NatType.SYMMETRIC;
     const punch_hole_request = rendezvous.PunchHoleRequest.fromPartial({
       id,
-      licence_key: localStorage.getItem("key") || undefined,
+      licence_key: this.getCommKey() || undefined,
       conn_type,
       nat_type,
-      token: localStorage.getItem("access_token") || undefined,
+      token: this.getAccessToken() || undefined,
     });
     ws.sendRendezvous({ punch_hole_request });
     const msg = (await ws.next()) as rendezvous.RendezvousMessage;
@@ -249,7 +311,7 @@ export default class Connection {
     console.log(new Date() + ": Connected to relay server");
     this._ws = ws;
     const request_relay = rendezvous.RequestRelay.fromPartial({
-      licence_key: localStorage.getItem("key") || undefined,
+      licence_key: this.getCommKey() || undefined,
       uuid,
     });
     ws.sendRendezvous({ request_relay });
@@ -260,9 +322,8 @@ export default class Connection {
 
   async secure(pk: Uint8Array | undefined) {
     if (pk) {
-      const RS_PK = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
       try {
-        pk = await globals.verify(pk, localStorage.getItem("key") || RS_PK);
+        pk = await globals.verify(pk, this.getCommKey(true) as string);
         if (pk) {
           const idpk = message.IdPk.decode(pk);
           if (idpk.id == this._id) {
@@ -343,9 +404,13 @@ export default class Connection {
       }
       if (msg?.hash) {
         this._hash = msg?.hash;
-        if (!this._password)
-          this.msgbox("input-password", "Password Required", "");
-        this.login();
+        if (!this._password && this._rawPassword) {
+          this.login(this._rawPassword);
+        } else {
+          if (!this._password)
+            this.msgbox("input-password", "Password Required", "");
+          this.login();
+        }
       } else if (msg?.test_delay) {
         const test_delay = msg?.test_delay;
         console.log(test_delay);
