@@ -2,35 +2,6 @@
 <html>
 
 <head>
-  <script>
-    (function() {
-      try {
-        const hash = window.location.hash;
-        console.log('[EagerParser] Initial URL hash:', hash);
-        const qIndex = hash.indexOf('?');
-        if (qIndex !== -1) {
-          const params = new URLSearchParams(hash.substring(qIndex));
-          const key = params.get('key');
-          const token = params.get('token');
-          const password = params.get('password');
-          if (key) {
-            window.sessionStorage.setItem('WASM_COMM_KEY', key);
-            console.log('[EagerParser] Eagerly cached key in sessionStorage:', key);
-          }
-          if (token) {
-            window.sessionStorage.setItem('WASM_ACCESS_TOKEN', token);
-            console.log('[EagerParser] Eagerly cached token in sessionStorage:', token);
-          }
-          if (password) {
-            window.sessionStorage.setItem('WASM_CONN_PASSWORD', password);
-            console.log('[EagerParser] Eagerly cached password in sessionStorage:', password);
-          }
-        }
-      } catch (e) {
-        console.error('[EagerParser] Eager parsing failed:', e);
-      }
-    })();
-  </script>
   <!--
     If you are serving your web app in a path other than the root, change the
     href value below to reflect the base path you are serving from.

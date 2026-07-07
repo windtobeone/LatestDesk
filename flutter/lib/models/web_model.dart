@@ -24,6 +24,15 @@ class PlatformFFI {
   final _eventHandlers = <String, Map<String, HandleEvent>>{};
   final RustdeskImpl _ffiBind = RustdeskImpl();
 
+  Function? _focusStateCallbackWrapper;
+
+  void registerFocusStateCallback(void Function(bool) callback) {
+    _focusStateCallbackWrapper = allowInterop((bool isFocused) {
+      callback(isFocused);
+    });
+    context['onFocusStateChanged'] = _focusStateCallbackWrapper;
+  }
+
   static String getByName(String name, [String arg = '']) {
     return context.callMethod('getByName', [name, arg]);
   }

@@ -42,6 +42,8 @@ class PlatformFFI {
   final _toAndroidChannel = const MethodChannel('mChannel');
 
   RustdeskImpl get ffiBind => _ffiBind;
+
+  void registerFocusStateCallback(void Function(bool) callback) {}
   F3? _session_get_rgba;
 
   static get localeName => Platform.localeName;

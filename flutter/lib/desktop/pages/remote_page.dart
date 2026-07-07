@@ -104,6 +104,7 @@ class _RemotePageState extends State<RemotePage>
   Worker? _waylandKeyboardModeWorker;
   bool _waylandKeyboardModeNormalized = false;
   bool _waylandKeyboardModeNormalizing = false;
+  late void Function(bool) _focusCallback;
 
   SessionID get sessionId => _ffi.sessionId;
 
@@ -121,6 +122,12 @@ class _RemotePageState extends State<RemotePage>
   @override
   void initState() {
     super.initState();
+    _focusCallback = (bool isFocused) {
+      if (mounted) {
+        setState(() {});
+      }
+    };
+    platformFFI.registerFocusStateCallback(_focusCallback);
     _ffi = FFI(widget.sessionId);
     Get.put<FFI>(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
