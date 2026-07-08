@@ -515,27 +515,41 @@ export default class Connection {
   getOptionMessage(): message.OptionMessage | undefined {
     let n = 0;
     const msg = message.OptionMessage.fromPartial({});
-    const q = this.getImageQualityEnum(this.getImageQuality(), true);
+    const quality = this.getImageQuality();
     const yes = message.OptionMessage_BoolOption.Yes;
-    if (q != undefined) {
-      msg.image_quality = q;
+    if (quality === "custom") {
+      msg.image_quality = message.ImageQuality.NotSet;
+      
+      const custom_quality_val = this.getOption("custom_image_quality");
+      const custom_quality = custom_quality_val ? parseInt(custom_quality_val) : 50;
+      msg.custom_image_quality = custom_quality << 8;
+
+      const custom_fps_val = this.getOption("custom-fps");
+      const custom_fps = custom_fps_val ? parseInt(custom_fps_val) : 30;
+      msg.custom_fps = custom_fps;
       n += 1;
+    } else {
+      const q = this.getImageQualityEnum(quality, true);
+      if (q != undefined) {
+        msg.image_quality = q;
+        n += 1;
+      }
     }
     msg.show_remote_cursor = yes;
     n += 1;
-    if (this._options["lock-after-session-end"]) {
+    if (this.getOption("lock-after-session-end")) {
       msg.lock_after_session_end = yes;
       n += 1;
     }
-    if (this._options["privacy-mode"]) {
+    if (this.getOption("privacy-mode")) {
       msg.privacy_mode = yes;
       n += 1;
     }
-    if (this._options["disable-audio"]) {
+    if (this.getOption("disable-audio") || iframeDisableAudio) {
       msg.disable_audio = yes;
       n += 1;
     }
-    if (this._options["disable-clipboard"]) {
+    if (this.getOption("disable-clipboard")) {
       msg.disable_clipboard = yes;
       n += 1;
     }
@@ -882,9 +896,22 @@ export default class Connection {
 
   setImageQuality(value: string) {
     this.setOption("image-quality", value);
-    const image_quality = this.getImageQualityEnum(value, false);
-    if (image_quality == undefined) return;
-    const option = message.OptionMessage.fromPartial({ image_quality });
+    let option: any = {};
+    if (value === "custom") {
+      option.image_quality = message.ImageQuality.NotSet;
+      
+      const custom_quality_val = this.getOption("custom_image_quality");
+      const custom_quality = custom_quality_val ? parseInt(custom_quality_val) : 50;
+      option.custom_image_quality = custom_quality << 8;
+
+      const custom_fps_val = this.getOption("custom-fps");
+      const custom_fps = custom_fps_val ? parseInt(custom_fps_val) : 30;
+      option.custom_fps = custom_fps;
+    } else {
+      const image_quality = this.getImageQualityEnum(value, false);
+      if (image_quality === undefined) return;
+      option.image_quality = image_quality;
+    }
     const misc = message.Misc.fromPartial({ option });
     this._ws?.sendMessage({ misc });
   }

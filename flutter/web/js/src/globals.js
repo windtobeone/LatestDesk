@@ -413,7 +413,12 @@ window.setByName = (name, value, value2) => {
       break;
     case 'custom_image_quality':
     case 'custom-fps':
-      if (curConn) curConn.setOption(name, value);
+      if (curConn) {
+        curConn.setOption(name, value);
+        if (curConn.getImageQuality() === 'custom') {
+          curConn.setImageQuality('custom');
+        }
+      }
       break;
     case 'toggle_privacy_mode':
       try {
