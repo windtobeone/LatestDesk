@@ -3448,7 +3448,7 @@ parseParamScreenRect(Map<String, dynamic> params) {
   return screenRect;
 }
 
-get isInputSourceFlutter => stateGlobal.getInputSource() == "Input source 2";
+get isInputSourceFlutter => isWeb || stateGlobal.getInputSource() == "Input source 2";
 
 class _CountDownButton extends StatefulWidget {
   _CountDownButton({

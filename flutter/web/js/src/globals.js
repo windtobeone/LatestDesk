@@ -297,6 +297,11 @@ window.setByName = (name, value, value2) => {
     case 'toggle_option':
       if (curConn) curConn.toggleOption(value);
       break;
+    case 'keyboard_capture_active':
+      if (curConn) {
+        curConn.setKeyboardCaptureActive(value === 'true');
+      }
+      break;
     case 'option:session':
       try {
         if (value2 !== undefined) {

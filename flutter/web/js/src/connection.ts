@@ -52,6 +52,8 @@ export default class Connection {
   _videoTestSpeed: number[];
   _display: number;
   _rawPassword: string | undefined;
+  _keyboardCaptureActive: boolean = false;
+  _activeKeys: Set<string> = new Set<string>();
   //_cursors: { [name: number]: any };
 
   isViewOnly(): boolean {
@@ -149,6 +151,7 @@ export default class Connection {
     this._display = 0;
     this._options = {};
     //this._cursors = {};
+    this.bindKeyboardHook();
   }
 
   async start(id: string) {
@@ -917,6 +920,127 @@ export default class Connection {
       console.log(decoder);
     });
   }
+
+  bindKeyboardHook() {
+    window.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (this.isViewOnly()) return;
+      if (!this._keyboardCaptureActive) return;
+      
+      // Intercept F11 to programmatically toggle Fullscreen API
+      if (e.key === 'F11' || e.code === 'F11') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch((err) => {
+            console.error("[JS Bridge Keyboard] Failed to enter fullscreen:", err);
+          });
+        } else {
+          document.exitFullscreen().catch((err) => {
+            console.error("[JS Bridge Keyboard] Failed to exit fullscreen:", err);
+          });
+        }
+        return;
+      }
+
+      if (this.isBrowserSystemShortcut(e)) return;
+      
+      e.stopPropagation();
+      e.preventDefault();
+      
+      this._activeKeys.add(e.code);
+      
+      let keyName: string | null = null;
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && !e.code.startsWith("Numpad")) {
+        keyName = e.key;
+      } else {
+        keyName = browserKeyToHbbKey(e);
+      }
+      
+      if (keyName) {
+        this.inputKey(keyName, true, false, e.altKey, e.ctrlKey, e.shiftKey, e.metaKey);
+      }
+    }, true); // Capture phase
+
+    window.addEventListener('keyup', (e: KeyboardEvent) => {
+      if (this.isViewOnly()) return;
+      if (!this._keyboardCaptureActive) return;
+      
+      // Intercept F11 keyup
+      if (e.key === 'F11' || e.code === 'F11') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      if (this.isBrowserSystemShortcut(e)) return;
+      
+      e.stopPropagation();
+      e.preventDefault();
+      
+      this._activeKeys.delete(e.code);
+      
+      let keyName: string | null = null;
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && !e.code.startsWith("Numpad")) {
+        keyName = e.key;
+      } else {
+        keyName = browserKeyToHbbKey(e);
+      }
+      
+      if (keyName) {
+        this.inputKey(keyName, false, false, e.altKey, e.ctrlKey, e.shiftKey, e.metaKey);
+      }
+    }, true); // Capture phase
+
+    document.addEventListener('fullscreenchange', () => {
+      const hasKeyboardAPI = !!(navigator as any).keyboard;
+      const hasLockFunc = hasKeyboardAPI && typeof (navigator as any).keyboard.lock === 'function';
+
+      if (document.fullscreenElement) {
+        if (hasLockFunc) {
+          (navigator as any).keyboard.lock().catch((err: any) => {
+            console.error("[JS Keyboard Hook] Failed to lock keyboard:", err);
+          });
+        }
+      } else {
+        if (hasKeyboardAPI && typeof (navigator as any).keyboard.unlock === 'function') {
+          (navigator as any).keyboard.unlock();
+        }
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      this.setKeyboardCaptureActive(false);
+    });
+  }
+
+  isBrowserSystemShortcut(e: KeyboardEvent): boolean {
+    if (document.fullscreenElement) {
+      return false;
+    }
+    if (e.key === 'F5' || e.key === 'F12') return true;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') return true;
+    return false;
+  }
+
+  setKeyboardCaptureActive(active: boolean) {
+    this._keyboardCaptureActive = active;
+    if (!active) {
+      this.releaseAllHeldKeys();
+    }
+  }
+
+  releaseAllHeldKeys() {
+    if (this._activeKeys.size === 0) return;
+    
+    for (const code of this._activeKeys) {
+      const fakeEvent = { code, key: '' } as KeyboardEvent;
+      const keyName = browserKeyToHbbKey(fakeEvent);
+      if (keyName) {
+        this.inputKey(keyName, false, false, false, false, false, false);
+      }
+    }
+    this._activeKeys.clear();
+  }
 }
 
 function testDelay() {
@@ -965,4 +1089,73 @@ function hash(datas: (string | Uint8Array)[]): Uint8Array {
     return hasher.update(data);
   });
   return hasher.digest();
+}
+
+function browserKeyToHbbKey(e: KeyboardEvent): string | null {
+  const code = e.code;
+  if (code.startsWith("Key")) {
+    return "VK_" + code.substring(3);
+  }
+  if (code.startsWith("Digit")) {
+    return "VK_" + code.substring(5);
+  }
+  if (code.startsWith("Numpad") && code.length === 7 && code[6] >= '0' && code[6] <= '9') {
+    return "VK_NUMPAD" + code[6];
+  }
+  if (code.startsWith("F") && code.length >= 2 && !isNaN(Number(code.substring(1)))) {
+    return "VK_" + code;
+  }
+  
+  switch (code) {
+    case "Enter": return "VK_RETURN";
+    case "Backspace": return "VK_BACK";
+    case "Tab": return "VK_TAB";
+    case "Space": return "VK_SPACE";
+    case "Escape": return "VK_ESCAPE";
+    case "Delete": return "VK_DELETE";
+    case "Insert": return "VK_INSERT";
+    case "Home": return "VK_HOME";
+    case "End": return "VK_END";
+    case "PageUp": return "VK_PRIOR";
+    case "PageDown": return "VK_NEXT";
+    case "ArrowLeft": return "VK_LEFT";
+    case "ArrowUp": return "VK_UP";
+    case "ArrowRight": return "VK_RIGHT";
+    case "ArrowDown": return "VK_DOWN";
+    case "CapsLock": return "VK_CAPITAL";
+    case "ScrollLock": return "VK_SCROLL";
+    case "Pause": return "VK_PAUSE";
+    case "Comma": return "VK_COMMA";
+    case "Slash": return "VK_SLASH";
+    case "Semicolon": return "VK_SEMICOLON";
+    case "Quote": return "VK_QUOTE";
+    case "BracketLeft": return "VK_LBRACKET";
+    case "BracketRight": return "VK_RBRACKET";
+    case "Backslash": return "VK_BACKSLASH";
+    case "Minus": return "VK_MINUS";
+    case "Equal": return "VK_PLUS";
+    case "ControlLeft": return "VK_CONTROL";
+    case "ControlRight": return "RControl";
+    case "ShiftLeft": return "VK_SHIFT";
+    case "ShiftRight": return "RShift";
+    case "AltLeft": return "VK_MENU";
+    case "AltRight": return "RAlt";
+    case "MetaLeft": return "Meta";
+    case "MetaRight": return "RWin";
+    case "NumpadDivide": return "VK_DIVIDE";
+    case "NumpadMultiply": return "VK_MULTIPLY";
+    case "NumpadSubtract": return "VK_SUBTRACT";
+    case "NumpadAdd": return "VK_ADD";
+    case "NumpadDecimal": return "VK_DECIMAL";
+    case "NumpadEnter": return "NumpadEnter";
+    case "NumLock": return "NumLock";
+    case "PrintScreen": return "VK_SNAPSHOT";
+    case "ContextMenu": return "Apps";
+    case "Help": return "VK_HELP";
+    default:
+      if (e.key && e.key.length === 1) {
+        return e.key;
+      }
+      return null;
+  }
 }
