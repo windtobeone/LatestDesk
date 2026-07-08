@@ -5,6 +5,7 @@ import 'dart:js_interop';
 import 'dart:typed_data';
 import 'dart:js';
 import 'dart:html';
+import 'dart:ui_web' as ui_web;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -32,6 +33,10 @@ class PlatformFFI {
     context.callMethod('setByName', [name, value]);
   }
 
+  bool hasWebcodecs() {
+    return context.callMethod('getByName', ['has_webcodecs']) == 'true';
+  }
+
   PlatformFFI._() {
     window.document.addEventListener(
         'visibilitychange',
@@ -39,6 +44,27 @@ class PlatformFFI {
               stateGlobal.isWebVisible =
                   window.document.visibilityState == 'visible'
             });
+  }
+
+  bool _isViewFactoryRegistered = false;
+
+  void registerViewFactory() {
+    if (_isViewFactoryRegistered) {
+      return;
+    }
+    _isViewFactoryRegistered = true;
+    ui_web.platformViewRegistry.registerViewFactory(
+      'remote-screen-view',
+      (int viewId) {
+        final canvas = CanvasElement();
+        canvas.id = 'remote-screen-canvas';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.pointerEvents = 'auto';
+        context['remoteScreenCanvas'] = canvas;
+        return canvas;
+      },
+    );
   }
 
   static final PlatformFFI instance = PlatformFFI._();

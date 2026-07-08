@@ -45,6 +45,10 @@ Future<void> main(List<String> args) async {
   debugPrint("launch args: $args");
   kBootArgs = List.from(args);
 
+  if (isWeb) {
+    platformFFI.registerViewFactory();
+  }
+
   if (!isDesktop) {
     runMobileApp();
     return;

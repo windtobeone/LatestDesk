@@ -54,6 +54,10 @@ class PlatformFFI {
 
   static void setByName(String name, [String value = '']) {}
 
+  bool hasWebcodecs() => false;
+
+  void registerViewFactory() {}
+
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
     return packageInfo.version;

@@ -313,6 +313,11 @@ window.setByName = (name, value, value2) => {
         console.error("setByName('option:session') error:", e);
       }
       break;
+    case 'change_prefer_codec':
+      if (curConn) {
+        curConn.changePreferCodec();
+      }
+      break;
     case 'option:peer':
     case 'peer_option':
       try {
@@ -473,10 +478,21 @@ function getPeersForDart() {
 function _getByName(name, arg) {
   console.log("FFI _getByName called:", name, "arg:", arg);
   switch (name) {
+    case 'has_webcodecs':
+      return typeof VideoDecoder !== 'undefined' ? 'true' : 'false';
     case 'session_verify_license':
       return window.verifyLicense(arg);
     case 'license_status':
       return window.licenseStatus();
+    case 'alternative_codecs':
+      const hasWC = typeof VideoDecoder !== 'undefined';
+      return JSON.stringify({
+        vp8: hasWC,
+        vp9: true,
+        av1: hasWC,
+        h264: hasWC,
+        h265: hasWC,
+      });
     case 'option:session':
       const val = curConn ? curConn.getOption(arg) : null;
       let retVal = (val === "" || val === undefined || val === null) ? null : val;

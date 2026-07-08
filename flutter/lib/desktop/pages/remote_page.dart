@@ -121,6 +121,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void initState() {
     super.initState();
+    platformFFI.registerViewFactory();
     _ffi = FFI(widget.sessionId);
     Get.put<FFI>(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
@@ -829,11 +830,16 @@ class _ImagePaintState extends State<ImagePaint> {
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
       final paintSize = Size(paintWidth, paintHeight);
-      final paintWidget =
-          m.useTextureRender || widget.ffi.ffiModel.pi.forceTextureRender
+      final paintWidget = isWeb && platformFFI.hasWebcodecs()
+          ? SizedBox(
+              width: paintWidth,
+              height: paintHeight,
+              child: const HtmlElementView(viewType: 'remote-screen-view'),
+            )
+          : (m.useTextureRender || widget.ffi.ffiModel.pi.forceTextureRender
               ? _BuildPaintTextureRender(
                   c, s, Offset.zero, paintSize, isViewOriginal())
-              : _buildScrollbarNonTextureRender(m, paintSize, s);
+              : _buildScrollbarNonTextureRender(m, paintSize, s));
       return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             c.updateScrollPercent();
@@ -880,6 +886,25 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
+    if (isWeb && platformFFI.hasWebcodecs()) {
+      final w = c.getDisplayWidth() * s;
+      final h = c.getDisplayHeight() * s;
+      return SizedBox(
+        width: c.size.width,
+        height: c.size.height,
+        child: Stack(
+          children: [
+            Positioned(
+              left: c.x,
+              top: c.y,
+              width: w,
+              height: h,
+              child: const HtmlElementView(viewType: 'remote-screen-view'),
+            ),
+          ],
+        ),
+      );
+    }
     double sizeScale = s;
     if (widget.ffi.ffiModel.isPeerLinux) {
       final displays = widget.ffi.ffiModel.pi.getCurDisplays();

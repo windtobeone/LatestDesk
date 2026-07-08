@@ -53,6 +53,14 @@ export default class Connection {
   _display: number;
   _rawPassword: string | undefined;
   //_cursors: { [name: number]: any };
+  _webcodecsDecoder: any;
+  _isKeyFrameReceived: boolean = false;
+  _framesInFlight: number = 0;
+  _hasWebCodecsSupport: boolean = typeof VideoDecoder !== 'undefined';
+  _lastRefreshTime: number = 0;
+  _currentCodec: 'vp8' | 'vp9' | 'av1' | 'h264' | 'h265' | null = null;
+  _currentWidth: number | null = null;
+  _currentHeight: number | null = null;
 
   isViewOnly(): boolean {
     if (iframeViewOnly) {
@@ -450,6 +458,9 @@ export default class Connection {
     clearInterval(this._interval);
     this._ws?.close();
     this._videoDecoder?.close();
+    try {
+      this._webcodecsDecoder?.close();
+    } catch (e) {}
     if (typeof document !== "undefined") {
       const el = document.getElementById("remote-cursor");
       if (el) el.style.display = "none";
@@ -457,6 +468,11 @@ export default class Connection {
   }
 
   refresh() {
+    const now = new Date().getTime();
+    if (now - this._lastRefreshTime < 500) {
+      return; // Rate-limit refresh requests to 500ms
+    }
+    this._lastRefreshTime = now;
     const misc = message.Misc.fromPartial({ refresh_video: true });
     this._ws?.sendMessage({ misc });
   }
@@ -508,6 +524,34 @@ export default class Connection {
   getOptionMessage(): message.OptionMessage | undefined {
     let n = 0;
     const msg = message.OptionMessage.fromPartial({});
+
+    const hasWC = this._hasWebCodecsSupport;
+    
+    const pref = this.getOption("codec-preference") || "auto";
+    let preferCodec = message.SupportedDecoding_PreferCodec.Auto;
+    if (pref === "h264" && hasWC) {
+      preferCodec = message.SupportedDecoding_PreferCodec.H264;
+    } else if (pref === "h265" && hasWC) {
+      preferCodec = message.SupportedDecoding_PreferCodec.H265;
+    } else if (pref === "av1" && hasWC) {
+      preferCodec = message.SupportedDecoding_PreferCodec.AV1;
+    } else if (pref === "vp9") {
+      preferCodec = message.SupportedDecoding_PreferCodec.VP9;
+    } else if (pref === "vp8" && hasWC) {
+      preferCodec = message.SupportedDecoding_PreferCodec.VP8;
+    } else if (pref === "auto") {
+      preferCodec = hasWC ? message.SupportedDecoding_PreferCodec.H264 : message.SupportedDecoding_PreferCodec.VP9;
+    }
+
+    msg.supported_decoding = message.SupportedDecoding.fromPartial({
+      ability_vp9: 1,
+      ability_h264: hasWC ? 1 : 0,
+      ability_av1: hasWC ? 1 : 0,
+      ability_h265: hasWC ? 1 : 0,
+      ability_vp8: hasWC ? 1 : 0,
+      prefer: preferCodec,
+    });
+    n += 1;
     const quality = this.getImageQuality();
     const yes = message.OptionMessage_BoolOption.Yes;
     if (quality === "custom") {
@@ -562,33 +606,90 @@ export default class Connection {
       this.msgbox("", "", "");
       this._firstFrame = true;
     }
-    if (vf.vp9s) {
-      const dec = this._videoDecoder;
-      var tm = new Date().getTime();
-      var i = 0;
-      const n = vf.vp9s?.frames.length;
-      vf.vp9s.frames.forEach((f) => {
-        dec.processFrame(f.data.slice(0).buffer, (ok: any) => {
-          i++;
-          if (i == n) this.sendVideoReceived();
-          if (ok && dec.frameBuffer && n == i) {
-            this.draw(dec.frameBuffer);
-            const now = new Date().getTime();
-            var elapsed = now - tm;
-            this._videoTestSpeed[1] += elapsed;
-            this._videoTestSpeed[0] += 1;
-            if (this._videoTestSpeed[0] >= 30) {
-              console.log(
-                "video decoder: " +
-                  parseInt(
-                    "" + this._videoTestSpeed[1] / this._videoTestSpeed[0]
-                  )
-              );
-              this._videoTestSpeed = [0, 0];
-            }
+    if (this._hasWebCodecsSupport && this._webcodecsDecoder) {
+      const display = this._display !== undefined ? this._display : 0;
+      const currentDisplayInfo = this._peerInfo?.displays[display];
+      const width = currentDisplayInfo ? currentDisplayInfo.width : 1920;
+      const height = currentDisplayInfo ? currentDisplayInfo.height : 1080;
+
+      if (vf.vp9s) {
+        this.decodeFrames(vf.vp9s.frames, 'vp9', {
+          codec: 'vp09.00.10.08',
+          codedWidth: width,
+          codedHeight: height,
+          optimizeForLatency: true,
+          hardwareAcceleration: "no-preference"
+        });
+      } else if (vf.h264s) {
+        this.decodeFrames(vf.h264s.frames, 'h264', {
+          codec: 'avc1.64002a',
+          codedWidth: width,
+          codedHeight: height,
+          optimizeForLatency: true,
+          hardwareAcceleration: "no-preference"
+        });
+      } else if (vf.h265s) {
+        this.decodeFrames(vf.h265s.frames, 'h265', {
+          codec: 'hev1.1.6.L120.90',
+          codedWidth: width,
+          codedHeight: height,
+          optimizeForLatency: true,
+          hardwareAcceleration: "no-preference"
+        });
+      } else if (vf.av1s) {
+        this.decodeFrames(vf.av1s.frames, 'av1', {
+          codec: 'av01.0.05M.08',
+          codedWidth: width,
+          codedHeight: height,
+          optimizeForLatency: true,
+          hardwareAcceleration: "no-preference"
+        });
+      } else if (vf.vp8s) {
+        this.decodeFrames(vf.vp8s.frames, 'vp8', {
+          codec: 'vp8',
+          codedWidth: width,
+          codedHeight: height,
+          optimizeForLatency: true,
+          hardwareAcceleration: "no-preference"
+        });
+      }
+    } else {
+      if (vf.vp9s) {
+        const dec = this._videoDecoder;
+        if (!dec) {
+          console.warn("Video decoder not ready yet, skipping frame...");
+          return;
+        }
+        var tm = new Date().getTime();
+        var i = 0;
+        const n = vf.vp9s?.frames.length;
+        vf.vp9s.frames.forEach((f) => {
+          try {
+            dec.processFrame(f.data.slice(0).buffer, (ok: any) => {
+              i++;
+              if (i == n) this.sendVideoReceived();
+              if (ok && dec.frameBuffer && n == i) {
+                this.draw(dec.frameBuffer);
+                const now = new Date().getTime();
+                var elapsed = now - tm;
+                this._videoTestSpeed[1] += elapsed;
+                this._videoTestSpeed[0] += 1;
+                if (this._videoTestSpeed[0] >= 30) {
+                  console.log(
+                    "video decoder: " +
+                      parseInt(
+                        "" + this._videoTestSpeed[1] / this._videoTestSpeed[0]
+                      )
+                  );
+                  this._videoTestSpeed = [0, 0];
+                }
+              }
+            });
+          } catch (err) {
+            console.error("Error processing frame on video decoder:", err);
           }
         });
-      });
+      }
     }
   }
 
@@ -700,6 +801,9 @@ export default class Connection {
       const peers = globals.getPeers();
       peers[this._id] = this._options;
       localStorage.setItem("peers", JSON.stringify(peers));
+    }
+    if (name === "view_style") {
+      this.updateHostStyle(value);
     }
   }
 
@@ -818,6 +922,15 @@ export default class Connection {
     this._ws?.sendMessage({ mouse_event });
   }
 
+  changePreferCodec() {
+    const option = this.getOptionMessage();
+    if (option) {
+      const misc = message.Misc.fromPartial({ option });
+      this._ws?.sendMessage({ misc });
+      console.log("[JS Bridge] Sent option message to change preferred codec:", option);
+    }
+  }
+
   toggleOption(name: string) {
     if (!this._options) {
       this._options = {};
@@ -909,13 +1022,474 @@ export default class Connection {
     this._ws?.sendMessage({ misc });
   }
 
+  initWebCodecs() {
+    try {
+      if (this._webcodecsDecoder) {
+        this._webcodecsDecoder.close();
+      }
+    } catch (e) {}
+
+    this._webcodecsDecoder = new VideoDecoder({
+      output: (videoFrame: any) => {
+        this.renderVideoFrame(videoFrame);
+      },
+      error: (e) => {
+        console.error("WebCodecs decode error:", e);
+        this.handleDecodingError();
+      }
+    });
+
+    this._framesInFlight = 0;
+    this._webcodecsDecoder.configure({
+      codec: 'vp09.00.10.08',
+      codedWidth: 1920,
+      codedHeight: 1080,
+      optimizeForLatency: true,
+      hardwareAcceleration: "no-preference"
+    });
+  }
+
+  renderVideoFrame(frame: any) {
+    try {
+      const canvas = (window as any).remoteScreenCanvas as HTMLCanvasElement;
+      if (!canvas) {
+        if (this._videoTestSpeed[0] % 30 === 0) {
+          console.warn("[JS Bridge] remoteScreenCanvas not found on window! Requesting keyframe...");
+        }
+        this._isKeyFrameReceived = false;
+        this.refresh();
+        return;
+      }
+      if (!(canvas as any)._hasMouseListeners) {
+        (canvas as any)._hasMouseListeners = true;
+        this.attachCanvasListeners(canvas);
+      }
+      // 动态调整 Canvas 大小以匹配实际画面尺寸
+      if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+        canvas.width = frame.displayWidth;
+        canvas.height = frame.displayHeight;
+        console.log("[JS Bridge] Canvas resized to:", frame.displayWidth, "x", frame.displayHeight);
+        
+        // 同步 Peer 画面分辨率事件给 Flutter 侧
+        const displays = [{
+          width: frame.displayWidth,
+          height: frame.displayHeight,
+          x: 0,
+          y: 0,
+          cursor_embedded: 0
+        }];
+        globals.pushEvent("sync_peer_info", { displays });
+      }
+
+      this.updateHostStyle();
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        console.error("[JS Bridge] Failed to get 2D context from canvas!");
+        return;
+      }
+      ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+      if (this._videoTestSpeed[0] % 30 === 0) {
+        console.log("[JS Bridge] VideoFrame successfully drawn onto canvas:", frame.displayWidth, "x", frame.displayHeight);
+      }
+      
+      const needAck = this._framesInFlight > 3;
+      this._framesInFlight = Math.max(0, this._framesInFlight - 1);
+      if (needAck) {
+        this.sendVideoReceived();
+      }
+    } catch (e) {
+      console.error("Error rendering VideoFrame onto Canvas:", e);
+      this._framesInFlight = 0;
+      this.refresh();
+    } finally {
+      // 显存溢出防线：刚性释放 VideoFrame
+      frame.close();
+    }
+  }
+
+  attachCanvasListeners(canvas: HTMLCanvasElement) {
+    console.log("[JS Bridge] Attaching native mouse, scroll, and keyboard listeners to canvas...");
+    canvas.tabIndex = 0; // Make Canvas focusable
+    canvas.style.outline = 'none'; // Hide focus outline border ring
+    let isPressed = false;
+
+    const handleMouse = (e: MouseEvent, msgType: 'move' | 'down' | 'up') => {
+      if (this.isViewOnly()) return;
+      e.preventDefault();
+
+      const rect = canvas.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+
+      const x = Math.round((localX / rect.width) * canvas.width);
+      const y = Math.round((localY / rect.height) * canvas.height);
+
+      let mask = 0;
+      if (msgType === 'move') {
+        mask = 0; // move
+      } else if (msgType === 'down') {
+        mask = 1; // down
+      } else if (msgType === 'up') {
+        mask = 2; // up
+      }
+
+      // Identify buttons
+      let button = e.button;
+      if (msgType === 'move') {
+        if (e.buttons & 1) button = 0; // Left
+        else if (e.buttons & 2) button = 2; // Right
+        else if (e.buttons & 4) button = 1; // Middle
+        else button = -1; // No buttons
+      }
+
+      if (button === 0) mask |= (1 << 3); // Left button mask (8)
+      else if (button === 2) mask |= (2 << 3); // Right button mask (16)
+      else if (button === 1) mask |= (4 << 3); // Middle / Wheel button mask (32)
+
+      this.inputMouse(
+        mask,
+        x,
+        y,
+        e.altKey,
+        e.ctrlKey,
+        e.shiftKey,
+        e.metaKey
+      );
+    };
+
+    canvas.addEventListener('mousedown', (e) => {
+      isPressed = true;
+      handleMouse(e, 'down');
+      canvas.focus(); // Force browser focus to Canvas to capture keys
+      console.log("[JS Bridge Keyboard] mousedown on canvas. canvas.focus() called. activeElement is now:", document.activeElement ? document.activeElement.tagName : 'null', "id:", document.activeElement ? (document.activeElement as any).id : '');
+      
+      // Request Keyboard Lock API to capture Meta/Win key and other system shortcuts when in fullscreen mode
+      if (navigator.keyboard && typeof (navigator.keyboard as any).lock === 'function') {
+        (navigator.keyboard as any).lock().then(() => {
+          console.log("[JS Bridge Keyboard] Keyboard lock successfully requested.");
+        }).catch((err: any) => {
+          console.warn("[JS Bridge Keyboard] Keyboard lock failed:", err);
+        });
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isPressed && e.target !== canvas) return;
+      handleMouse(e, 'move');
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (isPressed) {
+        isPressed = false;
+        handleMouse(e, 'up');
+      }
+    });
+
+    // Capture scroll events
+    canvas.addEventListener('wheel', (e: WheelEvent) => {
+      if (this.isViewOnly()) return;
+      e.preventDefault();
+      
+      this.inputMouse(
+        3, // wheel mask
+        -Math.round(e.deltaX),
+        -Math.round(e.deltaY),
+        e.altKey,
+        e.ctrlKey,
+        e.shiftKey,
+        e.metaKey
+      );
+    }, { passive: false });
+
+    // Block browser context menu for right click
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // Listen to fullscreen changes to activate/deactivate keyboard lock dynamically
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) {
+        if (navigator.keyboard && typeof (navigator.keyboard as any).lock === 'function') {
+          (navigator.keyboard as any).lock().then(() => {
+            console.log("[JS Bridge Keyboard] Keyboard lock successfully activated on fullscreenchange.");
+          }).catch((err: any) => {
+            console.warn("[JS Bridge Keyboard] Keyboard lock failed on fullscreenchange:", err);
+          });
+        }
+      } else {
+        if (navigator.keyboard && typeof (navigator.keyboard as any).unlock === 'function') {
+          (navigator.keyboard as any).unlock();
+          console.log("[JS Bridge Keyboard] Keyboard unlocked on exit fullscreen.");
+        }
+      }
+    });
+
+    // Native Keyboard Capturing on window, active only when canvas has focus
+    const browserKeyToHbbKey = (e: KeyboardEvent): string | null => {
+      const code = e.code;
+      if (code.startsWith("Key")) {
+        return "VK_" + code.substring(3);
+      }
+      if (code.startsWith("Digit")) {
+        return "VK_" + code.substring(5);
+      }
+      if (code.startsWith("Numpad") && code.length === 7 && code[6] >= '0' && code[6] <= '9') {
+        return "VK_NUMPAD" + code[6];
+      }
+      if (code.startsWith("F") && code.length >= 2 && !isNaN(Number(code.substring(1)))) {
+        return "VK_" + code;
+      }
+      
+      switch (code) {
+        case "Enter": return "VK_RETURN";
+        case "Backspace": return "VK_BACK";
+        case "Tab": return "VK_TAB";
+        case "Space": return "VK_SPACE";
+        case "Escape": return "VK_ESCAPE";
+        case "Delete": return "VK_DELETE";
+        case "Insert": return "VK_INSERT";
+        case "Home": return "VK_HOME";
+        case "End": return "VK_END";
+        case "PageUp": return "VK_PRIOR";
+        case "PageDown": return "VK_NEXT";
+        case "ArrowLeft": return "VK_LEFT";
+        case "ArrowUp": return "VK_UP";
+        case "ArrowRight": return "VK_RIGHT";
+        case "ArrowDown": return "VK_DOWN";
+        case "CapsLock": return "VK_CAPITAL";
+        case "ScrollLock": return "VK_SCROLL";
+        case "Pause": return "VK_PAUSE";
+        case "Comma": return "VK_COMMA";
+        case "Slash": return "VK_SLASH";
+        case "Semicolon": return "VK_SEMICOLON";
+        case "Quote": return "VK_QUOTE";
+        case "BracketLeft": return "VK_LBRACKET";
+        case "BracketRight": return "VK_RBRACKET";
+        case "Backslash": return "VK_BACKSLASH";
+        case "Minus": return "VK_MINUS";
+        case "Equal": return "VK_PLUS";
+        case "ControlLeft": return "VK_CONTROL";
+        case "ControlRight": return "RControl";
+        case "ShiftLeft": return "VK_SHIFT";
+        case "ShiftRight": return "RShift";
+        case "AltLeft": return "VK_MENU";
+        case "AltRight": return "RAlt";
+        case "MetaLeft": return "Meta";
+        case "MetaRight": return "RWin";
+        case "NumpadDivide": return "VK_DIVIDE";
+        case "NumpadMultiply": return "VK_MULTIPLY";
+        case "NumpadSubtract": return "VK_SUBTRACT";
+        case "NumpadAdd": return "VK_ADD";
+        case "NumpadDecimal": return "VK_DECIMAL";
+        case "NumpadEnter": return "NumpadEnter";
+        case "NumLock": return "NumLock";
+        case "PrintScreen": return "VK_SNAPSHOT";
+        case "ContextMenu": return "Apps";
+        case "Help": return "VK_HELP";
+        default:
+          if (e.key && e.key.length === 1) {
+            return e.key;
+          }
+          return null;
+      }
+    };
+
+    window.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (this.isViewOnly()) return;
+      console.log("[JS Bridge Keyboard] keydown event captured (capture phase). code:", e.code, "key:", e.key, "activeElement:", document.activeElement ? document.activeElement.tagName : 'null', "id:", document.activeElement ? (document.activeElement as any).id : '');
+      if (document.activeElement !== canvas) {
+        return;
+      }
+      
+      // Intercept F11 to programmatically toggle Fullscreen API
+      if (e.key === 'F11' || e.code === 'F11') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().then(() => {
+            console.log("[JS Bridge Keyboard] Entered fullscreen via F11 redirection.");
+          }).catch((err) => {
+            console.error("[JS Bridge Keyboard] Failed to enter fullscreen via F11:", err);
+          });
+        } else {
+          document.exitFullscreen().then(() => {
+            console.log("[JS Bridge Keyboard] Exited fullscreen via F11 redirection.");
+          }).catch((err) => {
+            console.error("[JS Bridge Keyboard] Failed to exit fullscreen via F11:", err);
+          });
+        }
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation(); // Prevent Flutter Web from capturing and blocking the key
+      
+      let keyName: string | null = null;
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && !e.code.startsWith("Numpad")) {
+        keyName = e.key;
+      } else {
+        keyName = browserKeyToHbbKey(e);
+      }
+      
+      console.log("[JS Bridge Keyboard] keyName mapped to:", keyName);
+      if (keyName) {
+        this.inputKey(keyName, true, false, e.altKey, e.ctrlKey, e.shiftKey, e.metaKey);
+      }
+    }, true); // Capture phase
+
+    window.addEventListener('keyup', (e: KeyboardEvent) => {
+      if (this.isViewOnly()) return;
+      console.log("[JS Bridge Keyboard] keyup event captured (capture phase). code:", e.code, "key:", e.key, "activeElement:", document.activeElement ? document.activeElement.tagName : 'null', "id:", document.activeElement ? (document.activeElement as any).id : '');
+      if (document.activeElement !== canvas) {
+        return;
+      }
+      
+      // Intercept F11 keyup
+      if (e.key === 'F11' || e.code === 'F11') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation(); // Prevent Flutter Web from capturing and blocking the key
+      
+      let keyName: string | null = null;
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && !e.code.startsWith("Numpad")) {
+        keyName = e.key;
+      } else {
+        keyName = browserKeyToHbbKey(e);
+      }
+      
+      console.log("[JS Bridge Keyboard] keyName mapped to:", keyName);
+      if (keyName) {
+        this.inputKey(keyName, false, false, e.altKey, e.ctrlKey, e.shiftKey, e.metaKey);
+      }
+    }, true); // Capture phase
+  }
+
+  findPlatformView(canvas: HTMLCanvasElement): HTMLElement | null {
+    let current: any = canvas;
+    if (this._videoTestSpeed[0] % 60 === 0) {
+      console.log("[JS Bridge DOM Path] Starting search from canvas:", canvas.id);
+    }
+    while (current) {
+      if (this._videoTestSpeed[0] % 60 === 0) {
+        console.log("[JS Bridge DOM Path] node:", current.tagName || current.nodeName || current);
+      }
+      if (current.tagName && current.tagName.toUpperCase() === 'FLT-PLATFORM-VIEW') {
+        return current as HTMLElement;
+      }
+      // 穿透 Shadow Boundary 和 Light ParentNode
+      current = current.parentNode || current.host;
+    }
+    if (this._videoTestSpeed[0] % 60 === 0) {
+      console.warn("[JS Bridge DOM Path] FLT-PLATFORM-VIEW not found in ancestor chain!");
+    }
+    return null;
+  }
+
+  updateHostStyle(styleName?: string) {
+    // Native Dart layout handles all sizing and positioning (original, adaptive, custom).
+    // No JS styling overrides are needed.
+  }
+
+  handleDecodingError() {
+    console.warn("[JS Bridge] WebCodecs decoding error. Resetting and requesting keyframe...");
+    try {
+      if (this._webcodecsDecoder) {
+        this._webcodecsDecoder.reset();
+        
+        let codec = 'vp09.00.10.08';
+        if (this._currentCodec === 'av1') {
+          codec = 'av01.0.05M.08';
+        } else if (this._currentCodec === 'h264') {
+          codec = 'avc1.64002a';
+        } else if (this._currentCodec === 'h265') {
+          codec = 'hev1.1.6.L120.90';
+        } else if (this._currentCodec === 'vp8') {
+          codec = 'vp8';
+        }
+        
+        this._framesInFlight = 0;
+        this._webcodecsDecoder.configure({
+          codec: codec,
+          codedWidth: 1920,
+          codedHeight: 1080,
+          optimizeForLatency: true,
+          hardwareAcceleration: "no-preference"
+        });
+      }
+      this._isKeyFrameReceived = false;
+      this.refresh(); // 精准联动被控端“关键帧刷新信令”
+    } catch (err) {
+      console.error("Failed to recover VideoDecoder:", err);
+    }
+  }
+
+  decodeFrames(frames: any[], codecName: 'vp8' | 'vp9' | 'av1' | 'h264' | 'h265', config: any) {
+    if (this._currentCodec !== codecName ||
+        this._currentWidth !== config.codedWidth ||
+        this._currentHeight !== config.codedHeight) {
+      console.log(`[JS Bridge] Configuring WebCodecs decoder for ${codecName.toUpperCase()} with resolution ${config.codedWidth}x${config.codedHeight}...`);
+      try {
+        this._webcodecsDecoder.configure(config);
+        this._currentCodec = codecName;
+        this._currentWidth = config.codedWidth;
+        this._currentHeight = config.codedHeight;
+        this._isKeyFrameReceived = false;
+      } catch (e) {
+        console.error(`[JS Bridge] Failed to configure decoder for ${codecName}:`, e);
+        return;
+      }
+    }
+
+    let i = 0;
+    const n = frames.length;
+    frames.forEach((f) => {
+      if (!this._isKeyFrameReceived) {
+        if (!f.key) {
+          console.log(`[JS Bridge] Dropping initial P-frame before keyframe for ${codecName}`);
+          return;
+        }
+        this._isKeyFrameReceived = true;
+        console.log(`[JS Bridge] Keyframe received for ${codecName}, starting decoder pipeline`);
+      }
+
+      try {
+        const chunk = new EncodedVideoChunk({
+          type: f.key ? 'key' : 'delta',
+          timestamp: f.pts,
+          data: f.data.slice(0).buffer
+        });
+        this._webcodecsDecoder.decode(chunk);
+        
+        this._framesInFlight++;
+        if (this._framesInFlight <= 3) {
+          this.sendVideoReceived();
+        }
+      } catch (err) {
+        console.error(`Error feeding ${codecName} chunk to VideoDecoder:`, err);
+        this.handleDecodingError();
+      }
+    });
+  }
+
   loadVideoDecoder() {
     this._videoDecoder?.close();
-    loadVp9((decoder: any) => {
-      this._videoDecoder = decoder;
-      console.log("vp9 loaded");
-      console.log(decoder);
-    });
+    this._isKeyFrameReceived = false;
+    this._framesInFlight = 0;
+
+    if (this._hasWebCodecsSupport) {
+      console.log("[JS Bridge] WebCodecs is supported. Initializing VideoDecoder...");
+      this.initWebCodecs();
+    } else {
+      console.log("[JS Bridge] WebCodecs is NOT supported. Falling back to WASM VP9...");
+      loadVp9((decoder: any) => {
+        this._videoDecoder = decoder;
+        console.log("vp9 loaded");
+        console.log(decoder);
+      });
+    }
   }
 }
 
