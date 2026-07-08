@@ -5,6 +5,50 @@
   (window as any).isMonitor = 'Y';
   (window as any).isMonitorFocused = false;
 
+  // 1.0 拦截 window.addEventListener 以防大屏动态 iframe 挂载时丢失 load 事件
+  const originalAddEventListener = window.addEventListener;
+  window.addEventListener = function (type: string, listener: any, options?: any) {
+    if (type === 'load') {
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        console.log("[Monitor Bootstrap] load event already fired, executing listener immediately.");
+        setTimeout(listener, 0);
+        return;
+      }
+    }
+    return originalAddEventListener.call(this, type, listener, options);
+  };
+
+  // 1.0.1 劫持 ServiceWorkerRegistration.prototype.installing，防止 reg.update() 异步执行导致 reg.installing 为空从而引发 waitForActivation 崩溃
+  try {
+    if ('ServiceWorkerRegistration' in window) {
+      const proto = ServiceWorkerRegistration.prototype;
+      const originalInstallingDescriptor = Object.getOwnPropertyDescriptor(proto, 'installing');
+      if (originalInstallingDescriptor) {
+        Object.defineProperty(proto, 'installing', {
+          get() {
+            const originalVal = originalInstallingDescriptor.get ? originalInstallingDescriptor.get.call(this) : null;
+            if (originalVal === null) {
+              return {
+                addEventListener(type: string, listener: any) {
+                  // No-op
+                },
+                removeEventListener(type: string, listener: any) {
+                  // No-op
+                },
+                state: 'installing'
+              };
+            }
+            return originalVal;
+          },
+          configurable: true,
+          enumerable: true
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[Monitor Bootstrap] Failed to intercept ServiceWorkerRegistration.prototype.installing:", e);
+  }
+
   // 1.1 动态钩入 connection 实例，实现大屏免密自动注入凭证到主网桥，做到核心网桥代码 100% 隔离零污染
   let currentConn: any = undefined;
   try {
@@ -59,38 +103,32 @@
     console.error("[Monitor Bootstrap] Failed to define window.getByName property descriptor:", e);
   }
 
-  // 1.3 动态挂接 window.loadMainDartJs，在大屏模式下挂起 Flutter 核心脚本的加载，直至完成双向握手授信
-  let realLoadMainDartJs: any = null;
+  // 1.3 动态挂接 window.loadMainDartJs，在大屏模式下挂起 Flutter 核心脚本 of 加载，直至完成双向握手授信
   let hasCredentials = false;
-  try {
-    Object.defineProperty(window, 'loadMainDartJs', {
-      get() {
-        return function () {
-          if ((window as any).isMonitor === 'Y' && !hasCredentials) {
-            console.log("[Monitor Bootstrap] loadMainDartJs intercepted, waiting for credentials...");
-            (window as any).triggerFlutterInit = function () {
-              console.log("[Monitor Bootstrap] triggerFlutterInit invoked. Resuming original loadMainDartJs...");
-              hasCredentials = true;
-              if (realLoadMainDartJs) realLoadMainDartJs();
-            };
-            if ((window as any).onWasmBridgeReady) {
-              (window as any).onWasmBridgeReady();
-            }
-          } else {
-            if (realLoadMainDartJs) realLoadMainDartJs();
+  let checkTimer = setInterval(() => {
+    if (typeof (window as any).loadMainDartJs === 'function' && !(window as any).loadMainDartJs.isIntercepted) {
+      const original = (window as any).loadMainDartJs;
+      const intercepted = function () {
+        if ((window as any).isMonitor === 'Y' && !hasCredentials) {
+          console.log("[Monitor Bootstrap] loadMainDartJs intercepted, waiting for credentials...");
+          (window as any).triggerFlutterInit = function () {
+            console.log("[Monitor Bootstrap] triggerFlutterInit invoked. Resuming original loadMainDartJs...");
+            hasCredentials = true;
+            original();
+          };
+          if ((window as any).onWasmBridgeReady) {
+            (window as any).onWasmBridgeReady();
           }
-        };
-      },
-      set(fn) {
-        realLoadMainDartJs = fn;
-      },
-      configurable: true,
-      enumerable: true,
-    });
-    console.log("[Monitor Bootstrap] Successfully defined interceptor descriptor for window.loadMainDartJs.");
-  } catch (e) {
-    console.error("[Monitor Bootstrap] Failed to define window.loadMainDartJs property descriptor:", e);
-  }
+        } else {
+          original();
+        }
+      };
+      (intercepted as any).isIntercepted = true;
+      (window as any).loadMainDartJs = intercepted;
+      console.log("[Monitor Bootstrap] Successfully intercepted window.loadMainDartJs via polling wrapper!");
+      clearInterval(checkTimer);
+    }
+  }, 50);
 
   // ACK Retry variables
   let handshakeTxId = Math.floor(Math.random() * 1000000) + 1;
