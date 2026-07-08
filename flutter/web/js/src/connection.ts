@@ -55,6 +55,15 @@ export default class Connection {
   _keyboardCaptureActive: boolean = false;
   _activeKeys: Set<string> = new Set<string>();
   connType: rendezvous.ConnType = rendezvous.ConnType.DEFAULT_CONN;
+  isTerminalAdmin: boolean = false;
+  osUsername?: string;
+  osPassword?: string;
+  _closed: boolean = false;
+  _fpsCount: number = 0;
+  _bytesReceived: number = 0;
+  _lastDelay: number = 0;
+  _targetBitrate: number = 0;
+  _qualityInterval?: any;
   //_cursors: { [name: number]: any };
 
   isViewOnly(): boolean {
@@ -157,8 +166,11 @@ export default class Connection {
 
   async start(id: string) {
     try {
+      this._closed = false;
+      this.startQualityStats();
       await this._start(id);
     } catch (e: any) {
+      if (this._closed) return;
       this.msgbox(
         "error",
         "Connection Error",
@@ -352,12 +364,26 @@ export default class Connection {
       }
       if (msg?.hash) {
         this._hash = msg?.hash;
+        if (this.isTerminalAdmin && (!this.osUsername || !this.osPassword)) {
+          if (!this._password) {
+            this.msgbox("terminal-admin-login-password", "", "");
+          } else {
+            this.msgbox("terminal-admin-login", "", "");
+          }
+          continue;
+        }
         if (!this._password)
           this.msgbox("input-password", "Password Required", "");
         this.login();
       } else if (msg?.test_delay) {
         const test_delay = msg?.test_delay;
         console.log(test_delay);
+        if (test_delay.last_delay != null) {
+          this._lastDelay = test_delay.last_delay;
+        }
+        if (test_delay.target_bitrate != null) {
+          this._targetBitrate = test_delay.target_bitrate;
+        }
         if (!test_delay.from_client) {
           this._ws?.sendMessage({ test_delay });
         }
@@ -401,6 +427,25 @@ export default class Connection {
           console.error(e);
         }
         // globals.pushEvent("clipboard", cb);
+      } else if (msg?.back_notification) {
+        const bn = msg.back_notification;
+        console.log("[JS] Received back_notification:", JSON.stringify(bn));
+        if (bn.privacy_mode_state !== undefined) {
+          const state = bn.privacy_mode_state;
+          const on = (state === 4 || state === 2 || state === "PrvOnSucceeded" || state === "PrvOnByOther"); // PrvOnSucceeded = 4, PrvOnByOther = 2
+          this.setOption("privacy-mode", on);
+          if (on && bn.impl_key) {
+            this.setOption("privacy-mode-impl-key", bn.impl_key);
+          } else {
+            this.setOption("privacy-mode-impl-key", undefined);
+          }
+          globals.pushEvent("update_privacy_mode", {});
+        }
+        if (bn.block_input_state !== undefined) {
+          const state = bn.block_input_state;
+          const on = (state === 2 || state === "BlkOnSucceeded"); // BlkOnSucceeded = 2
+          globals.pushEvent("update_block_input_state", { input_state: on ? "on" : "off" });
+        }
       } else if (msg?.terminal_response) {
         await this.dispatchTerminalResponse(msg.terminal_response);
       } else if (msg?.cursor_data) {
@@ -453,14 +498,61 @@ export default class Connection {
   }
 
   close() {
+    this._closed = true;
     this._msgs = [];
     clearInterval(this._interval);
+    if (this._qualityInterval) {
+      clearInterval(this._qualityInterval);
+      this._qualityInterval = undefined;
+    }
     this._ws?.close();
     this._videoDecoder?.close();
     if (typeof document !== "undefined") {
       const el = document.getElementById("remote-cursor");
       if (el) el.style.display = "none";
     }
+  }
+
+  startQualityStats() {
+    if (this._qualityInterval) {
+      clearInterval(this._qualityInterval);
+    }
+    this._qualityInterval = setInterval(() => {
+      if (this._closed) {
+        clearInterval(this._qualityInterval);
+        this._qualityInterval = undefined;
+        return;
+      }
+      let bytes = 0;
+      if (this._ws) {
+        bytes += this._ws.bytesReceived;
+        this._ws.bytesReceived = 0;
+      }
+      if (bytes === 0) {
+        bytes = this._bytesReceived;
+      }
+      
+      const speedKB = bytes / 1024;
+      const speedStr = `${speedKB.toFixed(2)}kB/s`;
+      
+      const isTerminal = this.connType === 5;
+      const fps = this._fpsCount;
+      const fpsStr = isTerminal
+        ? JSON.stringify({ "0": "-" })
+        : JSON.stringify({ "0": fps.toString() });
+      
+      globals.pushEvent("update_quality_status", {
+        speed: speedStr,
+        fps: fpsStr,
+        delay: this._lastDelay ? `${this._lastDelay}` : "0",
+        target_bitrate: this._targetBitrate ? `${this._targetBitrate}` : "-",
+        codec_format: "VP9",
+        chroma: "4:2:0"
+      });
+      
+      this._bytesReceived = 0;
+      this._fpsCount = 0;
+    }, 1000);
   }
 
   refresh() {
@@ -516,6 +608,13 @@ export default class Connection {
       loginRequestInit.file_transfer = { dir: "", show_hidden: false };
     } else if (this.connType === 4) { // ConnType.VIEW_CAMERA
       loginRequestInit.view_camera = {};
+    }
+
+    if (this.osUsername || this.osPassword) {
+      loginRequestInit.os_login = {
+        username: this.osUsername || "",
+        password: this.osPassword || ""
+      };
     }
 
     const login_request = message.LoginRequest.fromPartial(loginRequestInit);
@@ -581,6 +680,15 @@ export default class Connection {
     }
     if (vf.vp9s) {
       const dec = this._videoDecoder;
+      if (!dec) {
+        console.warn("[JS Codec] Video decoder not initialized yet, skipping frame.");
+        return;
+      }
+      vf.vp9s.frames.forEach((f) => {
+        if (f.data) {
+          this._bytesReceived += f.data.length;
+        }
+      });
       var tm = new Date().getTime();
       var i = 0;
       const n = vf.vp9s?.frames.length;
@@ -589,6 +697,7 @@ export default class Connection {
           i++;
           if (i == n) this.sendVideoReceived();
           if (ok && dec.frameBuffer && n == i) {
+            this._fpsCount += 1;
             this.draw(dec.frameBuffer);
             const now = new Date().getTime();
             var elapsed = now - tm;
@@ -872,16 +981,37 @@ export default class Connection {
         break;
       case "view-only":
       case "view_only":
+      case "show-quality-monitor":
+      case "show-my-cursor":
+      case "follow-remote-cursor":
+      case "follow-remote-window":
+      case "collapse-toolbar":
         needSend = false;
         break;
       default:
         return;
     }
     if (name.indexOf("block-input") < 0) this.setOption(name, v);
+    if (name === "privacy-mode") {
+      globals.pushEvent("update_privacy_mode", {});
+    }
     if (needSend) {
       const misc = message.Misc.fromPartial({ option });
       this._ws?.sendMessage({ misc });
     }
+  }
+
+  togglePrivacyMode(implKey: string, on: boolean) {
+    const toggle_privacy_mode = message.TogglePrivacyMode.fromPartial({
+      impl_key: implKey,
+      on: on,
+    });
+    const misc = message.Misc.fromPartial({ toggle_privacy_mode });
+    this._ws?.sendMessage({ misc });
+    // also update local option for immediate UI update response
+    this.setOption("privacy-mode", on);
+    this.setOption("privacy-mode-impl-key", on ? implKey : undefined);
+    globals.pushEvent("update_privacy_mode", {});
   }
 
   getImageQuality() {

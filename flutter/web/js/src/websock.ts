@@ -13,6 +13,7 @@ export default class Websock {
   _secretKey: [Uint8Array, number, number] | undefined;
   _uri: string;
   _isRendezvous: boolean;
+  bytesReceived: number = 0;
 
   constructor(uri: string, isRendezvous: boolean = true) {
     this._eventHandlers = {
@@ -167,6 +168,7 @@ export default class Websock {
 
   _recv_message(e: any) {
     if (e.data instanceof window.ArrayBuffer) {
+      this.bytesReceived += e.data.byteLength;
       let bytes = new Uint8Array(e.data);
       const k = this._secretKey;
       if (k) {
