@@ -452,6 +452,9 @@ class _RemotePageState extends State<RemotePage>
                         _ffi.inputModel.enterOrLeave(false);
                       }
                     }
+                    if (isWeb) {
+                      ffiSetByName('keyboard_capture_active', imageFocused ? 'true' : 'false');
+                    }
                   },
                   inputModel: _ffi.inputModel,
                   child: getBodyForDesktop(context))),

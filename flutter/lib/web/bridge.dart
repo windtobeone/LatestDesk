@@ -124,8 +124,10 @@ class RustdeskImpl {
 
   Future<bool?> sessionGetRemember(
       {required UuidValue sessionId, dynamic hint}) {
-    return Future(
-        () => js.context.callMethod('getByName', ['remember']) == 'true');
+    return Future(() {
+      final res = js.context.callMethod('getByName', ['remember']);
+      return res == 'true' || res == true;
+    });
   }
 
   Future<bool?> sessionGetToggleOption(
@@ -136,7 +138,8 @@ class RustdeskImpl {
 
   bool sessionGetToggleOptionSync(
       {required UuidValue sessionId, required String arg, dynamic hint}) {
-    return 'true' == js.context.callMethod('getByName', ['option:toggle', arg]);
+    final res = js.context.callMethod('getByName', ['option:toggle', arg]);
+    return res == 'true' || res == true;
   }
 
   Future<String?> sessionGetOption(

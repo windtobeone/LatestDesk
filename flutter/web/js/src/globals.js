@@ -307,8 +307,28 @@ window.setByName = (name, value, value2) => {
     case 'session_start':
       try {
         const info = JSON.parse(value);
-        newConn();
-        startConn(info.id);
+        console.log("[WSS Terminal] session_start called value:", value);
+        let conn = getConn();
+        if (conn && conn._id === info.id) {
+          console.log("[WSS Terminal] session_start: reusing existing connection for", info.id, "type:", conn.connType);
+        } else {
+          conn = newConn();
+          conn._id = info.id;
+          const isTerminalAdmin = localStorage.getItem('envvar:IS_TERMINAL_ADMIN') === 'Y';
+          if (isTerminalAdmin) {
+            conn.isTerminalAdmin = true;
+            localStorage.removeItem('envvar:IS_TERMINAL_ADMIN');
+          }
+          if (info.isTerminal) {
+            conn.connType = 5; // ConnType.TERMINAL
+          } else if (info.isFileTransfer) {
+            conn.connType = 1; // ConnType.FILE_TRANSFER
+          } else {
+            conn.connType = 0; // ConnType.DEFAULT_CONN
+          }
+          console.log("[WSS Terminal] session_start: creating new connection, type:", conn.connType, "admin:", conn.isTerminalAdmin);
+          startConn(info.id);
+        }
       } catch (e) {
         console.error("session_start error:", e);
       }
@@ -316,8 +336,23 @@ window.setByName = (name, value, value2) => {
     case 'session_add_sync':
       try {
         const info = JSON.parse(value);
+        console.log("[WSS Terminal] session_add_sync called value:", value);
         const conn = newConn();
         conn._id = info.id;
+        const isTerminalAdmin = localStorage.getItem('envvar:IS_TERMINAL_ADMIN') === 'Y';
+        if (isTerminalAdmin) {
+          conn.isTerminalAdmin = true;
+          localStorage.removeItem('envvar:IS_TERMINAL_ADMIN');
+        }
+        if (info.isTerminal) {
+          conn.connType = 5; // ConnType.TERMINAL
+        } else if (info.isFileTransfer) {
+          conn.connType = 1; // ConnType.FILE_TRANSFER
+        } else {
+          conn.connType = 0; // ConnType.DEFAULT_CONN
+        }
+        console.log("[WSS Terminal] session_add_sync: connection type set to:", conn.connType, "admin:", conn.isTerminalAdmin);
+        startConn(info.id);
       } catch (e) {
         console.error("session_add_sync error:", e);
       }
@@ -344,7 +379,9 @@ window.setByName = (name, value, value2) => {
       break;
     case 'login':
       value = JSON.parse(value);
-      curConn.setRemember(value.remember == 'true');
+      curConn.setRemember(!!value.remember);
+      if (value.os_username) curConn.osUsername = value.os_username;
+      if (value.os_password) curConn.osPassword = value.os_password;
       curConn.login(value.password);
       break;
     case 'close':
@@ -359,6 +396,11 @@ window.setByName = (name, value, value2) => {
     case 'option:toggle':
     case 'toggle_option':
       if (curConn) curConn.toggleOption(value);
+      break;
+    case 'keyboard_capture_active':
+      if (curConn) {
+        curConn.setKeyboardCaptureActive(value === 'true');
+      }
       break;
     case 'option:session':
       try {
@@ -424,7 +466,7 @@ window.setByName = (name, value, value2) => {
       try {
         const opt = JSON.parse(value);
         if (curConn) {
-          curConn.toggleOption('privacy-mode');
+          curConn.togglePrivacyMode(opt.impl_key, opt.on);
         }
       } catch (e) {
         console.error("setByName('toggle_privacy_mode') error:", e);
@@ -508,6 +550,19 @@ window.setByName = (name, value, value2) => {
       break;
     case 'input_os_password':
       curConn.inputOsPassword(value);
+      break;
+    case 'open_terminal':
+    case 'send_terminal_input':
+    case 'resize_terminal':
+    case 'close_terminal':
+      if (curConn) {
+        try {
+          const payload = JSON.parse(value);
+          curConn.handleTerminalAction(name, payload);
+        } catch (e) {
+          console.error("[JS Terminal Agent] Malformed JSON from Dart:", e);
+        }
+      }
       break;
     default:
       break;

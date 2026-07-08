@@ -49,6 +49,18 @@ export default class Connection {
   _videoTestSpeed: number[];
   _display: number;
   _rawPassword: string | undefined;
+  _keyboardCaptureActive: boolean = false;
+  _activeKeys: Set<string> = new Set<string>();
+  connType: rendezvous.ConnType = rendezvous.ConnType.DEFAULT_CONN;
+  isTerminalAdmin: boolean = false;
+  osUsername?: string;
+  osPassword?: string;
+  _closed: boolean = false;
+  _fpsCount: number = 0;
+  _bytesReceived: number = 0;
+  _lastDelay: number = 0;
+  _targetBitrate: number = 0;
+  _qualityInterval?: any;
   //_cursors: { [name: number]: any };
 
   isViewOnly(): boolean {
@@ -146,6 +158,7 @@ export default class Connection {
     this._display = 0;
     this._options = {};
     //this._cursors = {};
+    this.bindKeyboardHook();
   }
 
 
@@ -157,8 +170,11 @@ export default class Connection {
       if (id) {
         id = id.trim();
       }
+      this._closed = false;
+      this.startQualityStats();
       await this._start(id);
     } catch (e: any) {
+      if (this._closed) return;
       this.msgbox(
         "error",
         "Connection Error",
@@ -197,7 +213,7 @@ export default class Connection {
     );
     await ws.open();
     console.log(new Date() + ": Connected to rendezvous server");
-    const conn_type = rendezvous.ConnType.DEFAULT_CONN;
+    const conn_type = this.connType;
     const nat_type = rendezvous.NatType.SYMMETRIC;
     const punch_hole_request = rendezvous.PunchHoleRequest.fromPartial({
       id,
@@ -259,6 +275,7 @@ export default class Connection {
     const request_relay = rendezvous.RequestRelay.fromPartial({
       licence_key: localStorage.getItem("key") || undefined,
       uuid,
+      conn_type: this.connType,
     });
     ws.sendRendezvous({ request_relay });
     const secure = (await this.secure(pk)) || false;
@@ -350,6 +367,14 @@ export default class Connection {
       }
       if (msg?.hash) {
         this._hash = msg?.hash;
+        if (this.isTerminalAdmin && (!this.osUsername || !this.osPassword)) {
+          if (!this._password) {
+            this.msgbox("terminal-admin-login-password", "", "");
+          } else {
+            this.msgbox("terminal-admin-login", "", "");
+          }
+          continue;
+        }
         if (!this._password && this._rawPassword) {
           this.login(this._rawPassword);
         } else {
@@ -360,6 +385,12 @@ export default class Connection {
       } else if (msg?.test_delay) {
         const test_delay = msg?.test_delay;
         console.log(test_delay);
+        if (test_delay.last_delay != null) {
+          this._lastDelay = test_delay.last_delay;
+        }
+        if (test_delay.target_bitrate != null) {
+          this._targetBitrate = test_delay.target_bitrate;
+        }
         if (!test_delay.from_client) {
           this._ws?.sendMessage({ test_delay });
         }
@@ -403,6 +434,27 @@ export default class Connection {
           console.error(e);
         }
         // globals.pushEvent("clipboard", cb);
+      } else if (msg?.back_notification) {
+        const bn = msg.back_notification;
+        console.log("[JS] Received back_notification:", JSON.stringify(bn));
+        if (bn.privacy_mode_state !== undefined) {
+          const state = bn.privacy_mode_state;
+          const on = (state === 4 || state === 2 || state === "PrvOnSucceeded" || state === "PrvOnByOther"); // PrvOnSucceeded = 4, PrvOnByOther = 2
+          this.setOption("privacy-mode", on);
+          if (on && bn.impl_key) {
+            this.setOption("privacy-mode-impl-key", bn.impl_key);
+          } else {
+            this.setOption("privacy-mode-impl-key", undefined);
+          }
+          globals.pushEvent("update_privacy_mode", {});
+        }
+        if (bn.block_input_state !== undefined) {
+          const state = bn.block_input_state;
+          const on = (state === 2 || state === "BlkOnSucceeded"); // BlkOnSucceeded = 2
+          globals.pushEvent("update_block_input_state", { input_state: on ? "on" : "off" });
+        }
+      } else if (msg?.terminal_response) {
+        await this.dispatchTerminalResponse(msg.terminal_response);
       } else if (msg?.cursor_data) {
         const cd = msg?.cursor_data;
         const c = await decompress(cd.colors);
@@ -453,14 +505,61 @@ export default class Connection {
   }
 
   close() {
+    this._closed = true;
     this._msgs = [];
     clearInterval(this._interval);
+    if (this._qualityInterval) {
+      clearInterval(this._qualityInterval);
+      this._qualityInterval = undefined;
+    }
     this._ws?.close();
     this._videoDecoder?.close();
     if (typeof document !== "undefined") {
       const el = document.getElementById("remote-cursor");
       if (el) el.style.display = "none";
     }
+  }
+
+  startQualityStats() {
+    if (this._qualityInterval) {
+      clearInterval(this._qualityInterval);
+    }
+    this._qualityInterval = setInterval(() => {
+      if (this._closed) {
+        clearInterval(this._qualityInterval);
+        this._qualityInterval = undefined;
+        return;
+      }
+      let bytes = 0;
+      if (this._ws) {
+        bytes += this._ws.bytesReceived;
+        this._ws.bytesReceived = 0;
+      }
+      if (bytes === 0) {
+        bytes = this._bytesReceived;
+      }
+      
+      const speedKB = bytes / 1024;
+      const speedStr = `${speedKB.toFixed(2)}kB/s`;
+      
+      const isTerminal = this.connType === 5;
+      const fps = this._fpsCount;
+      const fpsStr = isTerminal
+        ? JSON.stringify({ "0": "-" })
+        : JSON.stringify({ "0": fps.toString() });
+      
+      globals.pushEvent("update_quality_status", {
+        speed: speedStr,
+        fps: fpsStr,
+        delay: this._lastDelay ? `${this._lastDelay}` : "0",
+        target_bitrate: this._targetBitrate ? `${this._targetBitrate}` : "-",
+        codec_format: "VP9",
+        chroma: "4:2:0"
+      });
+      
+      this._bytesReceived = 0;
+      this._fpsCount = 0;
+    }, 1000);
   }
 
   refresh() {
@@ -501,14 +600,31 @@ export default class Connection {
   }
 
   _sendLoginMessage(password: Uint8Array | undefined = undefined) {
-    const login_request = message.LoginRequest.fromPartial({
+    const loginRequestInit: any = {
       username: this._id!,
       my_id: "web", // to-do
       my_name: "web", // to-do
       password,
       option: this.getOptionMessage(),
       video_ack_required: true,
-    });
+    };
+
+    if (this.connType === 5) { // ConnType.TERMINAL
+      loginRequestInit.terminal = { service_id: "" };
+    } else if (this.connType === 1) { // ConnType.FILE_TRANSFER
+      loginRequestInit.file_transfer = { dir: "", show_hidden: false };
+    } else if (this.connType === 4) { // ConnType.VIEW_CAMERA
+      loginRequestInit.view_camera = {};
+    }
+
+    if (this.osUsername || this.osPassword) {
+      loginRequestInit.os_login = {
+        username: this.osUsername || "",
+        password: this.osPassword || ""
+      };
+    }
+
+    const login_request = message.LoginRequest.fromPartial(loginRequestInit);
     this._ws?.sendMessage({ login_request });
   }
 
@@ -571,6 +687,15 @@ export default class Connection {
     }
     if (vf.vp9s) {
       const dec = this._videoDecoder;
+      if (!dec) {
+        console.warn("[JS Codec] Video decoder not initialized yet, skipping frame.");
+        return;
+      }
+      vf.vp9s.frames.forEach((f) => {
+        if (f.data) {
+          this._bytesReceived += f.data.length;
+        }
+      });
       var tm = new Date().getTime();
       var i = 0;
       const n = vf.vp9s?.frames.length;
@@ -579,6 +704,7 @@ export default class Connection {
           i++;
           if (i == n) this.sendVideoReceived();
           if (ok && dec.frameBuffer && n == i) {
+            this._fpsCount += 1;
             this.draw(dec.frameBuffer);
             const now = new Date().getTime();
             var elapsed = now - tm;
@@ -601,7 +727,7 @@ export default class Connection {
 
   handlePeerInfo(pi: message.PeerInfo) {
     this._peerInfo = pi;
-    if (pi.displays.length == 0) {
+    if (this.connType !== 5 && this.connType !== 1 && pi.displays.length == 0) {
       this.msgbox("error", "Remote Error", "No Display");
       return;
     }
@@ -862,16 +988,37 @@ export default class Connection {
         break;
       case "view-only":
       case "view_only":
+      case "show-quality-monitor":
+      case "show-my-cursor":
+      case "follow-remote-cursor":
+      case "follow-remote-window":
+      case "collapse-toolbar":
         needSend = false;
         break;
       default:
         return;
     }
     if (name.indexOf("block-input") < 0) this.setOption(name, v);
+    if (name === "privacy-mode") {
+      globals.pushEvent("update_privacy_mode", {});
+    }
     if (needSend) {
       const misc = message.Misc.fromPartial({ option });
       this._ws?.sendMessage({ misc });
     }
+  }
+
+  togglePrivacyMode(implKey: string, on: boolean) {
+    const toggle_privacy_mode = message.TogglePrivacyMode.fromPartial({
+      impl_key: implKey,
+      on: on,
+    });
+    const misc = message.Misc.fromPartial({ toggle_privacy_mode });
+    this._ws?.sendMessage({ misc });
+    // also update local option for immediate UI update response
+    this.setOption("privacy-mode", on);
+    this.setOption("privacy-mode-impl-key", on ? implKey : undefined);
+    globals.pushEvent("update_privacy_mode", {});
   }
 
   getImageQuality() {
@@ -924,6 +1071,251 @@ export default class Connection {
       console.log(decoder);
     });
   }
+
+  bindKeyboardHook() {
+    window.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (this.isViewOnly()) return;
+      if (!this._keyboardCaptureActive) return;
+      
+      // Intercept F11 to programmatically toggle Fullscreen API
+      if (e.key === 'F11' || e.code === 'F11') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch((err) => {
+            console.error("[JS Bridge Keyboard] Failed to enter fullscreen:", err);
+          });
+        } else {
+          document.exitFullscreen().catch((err) => {
+            console.error("[JS Bridge Keyboard] Failed to exit fullscreen:", err);
+          });
+        }
+        return;
+      }
+
+      if (this.isBrowserSystemShortcut(e)) return;
+      
+      e.stopPropagation();
+      e.preventDefault();
+      
+      this._activeKeys.add(e.code);
+      
+      let keyName: string | null = null;
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && !e.code.startsWith("Numpad")) {
+        keyName = e.key;
+      } else {
+        keyName = browserKeyToHbbKey(e);
+      }
+      
+      if (keyName) {
+        this.inputKey(keyName, true, false, e.altKey, e.ctrlKey, e.shiftKey, e.metaKey);
+      }
+    }, true); // Capture phase
+
+    window.addEventListener('keyup', (e: KeyboardEvent) => {
+      if (this.isViewOnly()) return;
+      if (!this._keyboardCaptureActive) return;
+      
+      // Intercept F11 keyup
+      if (e.key === 'F11' || e.code === 'F11') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      if (this.isBrowserSystemShortcut(e)) return;
+      
+      e.stopPropagation();
+      e.preventDefault();
+      
+      this._activeKeys.delete(e.code);
+      
+      let keyName: string | null = null;
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && !e.code.startsWith("Numpad")) {
+        keyName = e.key;
+      } else {
+        keyName = browserKeyToHbbKey(e);
+      }
+      
+      if (keyName) {
+        this.inputKey(keyName, false, false, e.altKey, e.ctrlKey, e.shiftKey, e.metaKey);
+      }
+    }, true); // Capture phase
+
+    document.addEventListener('fullscreenchange', () => {
+      const hasKeyboardAPI = !!(navigator as any).keyboard;
+      const hasLockFunc = hasKeyboardAPI && typeof (navigator as any).keyboard.lock === 'function';
+
+      if (document.fullscreenElement) {
+        if (hasLockFunc) {
+          (navigator as any).keyboard.lock().catch((err: any) => {
+            console.error("[JS Keyboard Hook] Failed to lock keyboard:", err);
+          });
+        }
+      } else {
+        if (hasKeyboardAPI && typeof (navigator as any).keyboard.unlock === 'function') {
+          (navigator as any).keyboard.unlock();
+        }
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      this.setKeyboardCaptureActive(false);
+    });
+  }
+
+  isBrowserSystemShortcut(e: KeyboardEvent): boolean {
+    if (document.fullscreenElement) {
+      return false;
+    }
+    if (e.key === 'F5' || e.key === 'F12') return true;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') return true;
+    return false;
+  }
+
+  setKeyboardCaptureActive(active: boolean) {
+    this._keyboardCaptureActive = active;
+    if (!active) {
+      this.releaseAllHeldKeys();
+    }
+  }
+
+  releaseAllHeldKeys() {
+    if (this._activeKeys.size === 0) return;
+    
+    for (const code of this._activeKeys) {
+      const fakeEvent = { code, key: '' } as KeyboardEvent;
+      const keyName = browserKeyToHbbKey(fakeEvent);
+      if (keyName) {
+        this.inputKey(keyName, false, false, false, false, false, false);
+      }
+    }
+    this._activeKeys.clear();
+  }
+
+  handleTerminalAction(actionName: string, payload: any) {
+    console.log("[WSS Terminal] handleTerminalAction called:", actionName, JSON.stringify(payload));
+    const terminalId = payload.terminal_id;
+    if (terminalId === undefined) return;
+
+    switch (actionName) {
+      case 'open_terminal':
+        this.openTerminal(terminalId, payload.rows || 24, payload.cols || 80);
+        break;
+      case 'send_terminal_input':
+        this.sendTerminalInput(terminalId, payload.data);
+        break;
+      case 'resize_terminal':
+        this.resizeTerminal(terminalId, payload.rows, payload.cols);
+        break;
+      case 'close_terminal':
+        this.closeTerminal(terminalId);
+        break;
+    }
+  }
+
+  private openTerminal(terminalId: number, rows: number, cols: number) {
+    const open = message.OpenTerminal.fromPartial({
+      terminal_id: terminalId,
+      rows: rows,
+      cols: cols
+    });
+    const terminal_action = message.TerminalAction.fromPartial({
+      open
+    });
+    console.log("[WSS Terminal] Sending TerminalAction(open):", JSON.stringify(terminal_action));
+    this._ws?.sendMessage({ terminal_action });
+  }
+
+  private sendTerminalInput(terminalId: number, dataStr: string) {
+    console.log("[WSS Terminal] Sending TerminalAction(input) len:", dataStr ? dataStr.length : 0);
+    if (!dataStr) return;
+    const bytes = new TextEncoder().encode(dataStr);
+
+    const data = message.TerminalData.fromPartial({
+      terminal_id: terminalId,
+      data: bytes,
+      compressed: false
+    });
+    const terminal_action = message.TerminalAction.fromPartial({
+      data
+    });
+    this._ws?.sendMessage({ terminal_action });
+  }
+
+  private resizeTerminal(terminalId: number, rows: number, cols: number) {
+    const resize = message.ResizeTerminal.fromPartial({
+      terminal_id: terminalId,
+      rows: rows,
+      cols: cols
+    });
+    const terminal_action = message.TerminalAction.fromPartial({
+      resize
+    });
+    console.log("[WSS Terminal] Sending TerminalAction(resize):", JSON.stringify(terminal_action));
+    this._ws?.sendMessage({ terminal_action });
+  }
+
+  private closeTerminal(terminalId: number) {
+    const close = message.CloseTerminal.fromPartial({
+      terminal_id: terminalId
+    });
+    const terminal_action = message.TerminalAction.fromPartial({
+      close
+    });
+    console.log("[WSS Terminal] Sending TerminalAction(close):", JSON.stringify(terminal_action));
+    this._ws?.sendMessage({ terminal_action });
+  }
+
+  private async dispatchTerminalResponse(resp: message.TerminalResponse) {
+    console.log("[WSS Terminal] Received TerminalResponse from peer:", JSON.stringify(resp));
+    const terminalId = resp.opened ? resp.opened.terminal_id : (resp.data ? resp.data.terminal_id : (resp.closed ? resp.closed.terminal_id : (resp.error ? resp.error.terminal_id : 0)));
+    const evtData: Record<string, any> = {
+      name: 'terminal_response',
+      terminal_id: terminalId.toString(),
+    };
+
+    if (resp.opened) {
+      evtData.type = 'opened';
+      evtData.success = resp.opened.success;
+      evtData.message = resp.opened.message;
+      evtData.service_id = resp.opened.service_id;
+      evtData.persistent_sessions = resp.opened.persistent_sessions;
+    } 
+    else if (resp.data) {
+      evtData.type = 'data';
+      
+      let rawBytes: Uint8Array = resp.data.data;
+      if (resp.data.compressed) {
+        const decompressed = await decompress(rawBytes);
+        if (decompressed) {
+          rawBytes = decompressed;
+        } else {
+          console.error("[WSS Terminal] Failed to decompress terminal data!");
+        }
+      }
+
+      let binaryString = '';
+      for (let i = 0; i < rawBytes.length; i++) {
+        binaryString += String.fromCharCode(rawBytes[i]);
+      }
+      const safeBase64 = btoa(binaryString);
+
+      evtData.data = safeBase64;
+      evtData.compressed = false;
+    } 
+    else if (resp.closed) {
+      evtData.type = 'closed';
+      evtData.exit_code = resp.closed.exit_code;
+    } 
+    else if (resp.error) {
+      evtData.type = 'error';
+      evtData.message = resp.error.message;
+    }
+
+    console.log("[WSS Terminal] Dispatching terminal event to Dart:", JSON.stringify(evtData));
+    globals.pushEvent(evtData.name, evtData);
+  }
 }
 
 function testDelay() {
@@ -972,4 +1364,73 @@ function hash(datas: (string | Uint8Array)[]): Uint8Array {
     return hasher.update(data);
   });
   return hasher.digest();
+}
+
+function browserKeyToHbbKey(e: KeyboardEvent): string | null {
+  const code = e.code;
+  if (code.startsWith("Key")) {
+    return "VK_" + code.substring(3);
+  }
+  if (code.startsWith("Digit")) {
+    return "VK_" + code.substring(5);
+  }
+  if (code.startsWith("Numpad") && code.length === 7 && code[6] >= '0' && code[6] <= '9') {
+    return "VK_NUMPAD" + code[6];
+  }
+  if (code.startsWith("F") && code.length >= 2 && !isNaN(Number(code.substring(1)))) {
+    return "VK_" + code;
+  }
+  
+  switch (code) {
+    case "Enter": return "VK_RETURN";
+    case "Backspace": return "VK_BACK";
+    case "Tab": return "VK_TAB";
+    case "Space": return "VK_SPACE";
+    case "Escape": return "VK_ESCAPE";
+    case "Delete": return "VK_DELETE";
+    case "Insert": return "VK_INSERT";
+    case "Home": return "VK_HOME";
+    case "End": return "VK_END";
+    case "PageUp": return "VK_PRIOR";
+    case "PageDown": return "VK_NEXT";
+    case "ArrowLeft": return "VK_LEFT";
+    case "ArrowUp": return "VK_UP";
+    case "ArrowRight": return "VK_RIGHT";
+    case "ArrowDown": return "VK_DOWN";
+    case "CapsLock": return "VK_CAPITAL";
+    case "ScrollLock": return "VK_SCROLL";
+    case "Pause": return "VK_PAUSE";
+    case "Comma": return "VK_COMMA";
+    case "Slash": return "VK_SLASH";
+    case "Semicolon": return "VK_SEMICOLON";
+    case "Quote": return "VK_QUOTE";
+    case "BracketLeft": return "VK_LBRACKET";
+    case "BracketRight": return "VK_RBRACKET";
+    case "Backslash": return "VK_BACKSLASH";
+    case "Minus": return "VK_MINUS";
+    case "Equal": return "VK_PLUS";
+    case "ControlLeft": return "VK_CONTROL";
+    case "ControlRight": return "RControl";
+    case "ShiftLeft": return "VK_SHIFT";
+    case "ShiftRight": return "RShift";
+    case "AltLeft": return "VK_MENU";
+    case "AltRight": return "RAlt";
+    case "MetaLeft": return "Meta";
+    case "MetaRight": return "RWin";
+    case "NumpadDivide": return "VK_DIVIDE";
+    case "NumpadMultiply": return "VK_MULTIPLY";
+    case "NumpadSubtract": return "VK_SUBTRACT";
+    case "NumpadAdd": return "VK_ADD";
+    case "NumpadDecimal": return "VK_DECIMAL";
+    case "NumpadEnter": return "NumpadEnter";
+    case "NumLock": return "NumLock";
+    case "PrintScreen": return "VK_SNAPSHOT";
+    case "ContextMenu": return "Apps";
+    case "Help": return "VK_HELP";
+    default:
+      if (e.key && e.key.length === 1) {
+        return e.key;
+      }
+      return null;
+  }
 }
