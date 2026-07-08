@@ -54,6 +54,7 @@ export default class Connection {
   _rawPassword: string | undefined;
   _keyboardCaptureActive: boolean = false;
   _activeKeys: Set<string> = new Set<string>();
+  connType: rendezvous.ConnType = rendezvous.ConnType.DEFAULT_CONN;
   //_cursors: { [name: number]: any };
 
   isViewOnly(): boolean {
@@ -196,7 +197,7 @@ export default class Connection {
     );
     await ws.open();
     console.log(new Date() + ": Connected to rendezvous server");
-    const conn_type = rendezvous.ConnType.DEFAULT_CONN;
+    const conn_type = this.connType;
     const nat_type = rendezvous.NatType.SYMMETRIC;
     const punch_hole_request = rendezvous.PunchHoleRequest.fromPartial({
       id,
@@ -258,6 +259,7 @@ export default class Connection {
     const request_relay = rendezvous.RequestRelay.fromPartial({
       licence_key: localStorage.getItem("key") || undefined,
       uuid,
+      conn_type: this.connType,
     });
     ws.sendRendezvous({ request_relay });
     const secure = (await this.secure(pk)) || false;
@@ -399,6 +401,8 @@ export default class Connection {
           console.error(e);
         }
         // globals.pushEvent("clipboard", cb);
+      } else if (msg?.terminal_response) {
+        await this.dispatchTerminalResponse(msg.terminal_response);
       } else if (msg?.cursor_data) {
         const cd = msg?.cursor_data;
         const c = await decompress(cd.colors);
@@ -497,14 +501,24 @@ export default class Connection {
   }
 
   _sendLoginMessage(password: Uint8Array | undefined = undefined) {
-    const login_request = message.LoginRequest.fromPartial({
+    const loginRequestInit: any = {
       username: this._id!,
       my_id: "web", // to-do
       my_name: "web", // to-do
       password,
       option: this.getOptionMessage(),
       video_ack_required: true,
-    });
+    };
+
+    if (this.connType === 5) { // ConnType.TERMINAL
+      loginRequestInit.terminal = { service_id: "" };
+    } else if (this.connType === 1) { // ConnType.FILE_TRANSFER
+      loginRequestInit.file_transfer = { dir: "", show_hidden: false };
+    } else if (this.connType === 4) { // ConnType.VIEW_CAMERA
+      loginRequestInit.view_camera = {};
+    }
+
+    const login_request = message.LoginRequest.fromPartial(loginRequestInit);
     this._ws?.sendMessage({ login_request });
   }
 
@@ -597,7 +611,7 @@ export default class Connection {
 
   handlePeerInfo(pi: message.PeerInfo) {
     this._peerInfo = pi;
-    if (pi.displays.length == 0) {
+    if (this.connType !== 5 && this.connType !== 1 && pi.displays.length == 0) {
       this.msgbox("error", "Remote Error", "No Display");
       return;
     }
@@ -1040,6 +1054,130 @@ export default class Connection {
       }
     }
     this._activeKeys.clear();
+  }
+
+  handleTerminalAction(actionName: string, payload: any) {
+    console.log("[WSS Terminal] handleTerminalAction called:", actionName, JSON.stringify(payload));
+    const terminalId = payload.terminal_id;
+    if (terminalId === undefined) return;
+
+    switch (actionName) {
+      case 'open_terminal':
+        this.openTerminal(terminalId, payload.rows || 24, payload.cols || 80);
+        break;
+      case 'send_terminal_input':
+        this.sendTerminalInput(terminalId, payload.data);
+        break;
+      case 'resize_terminal':
+        this.resizeTerminal(terminalId, payload.rows, payload.cols);
+        break;
+      case 'close_terminal':
+        this.closeTerminal(terminalId);
+        break;
+    }
+  }
+
+  private openTerminal(terminalId: number, rows: number, cols: number) {
+    const open = message.OpenTerminal.fromPartial({
+      terminal_id: terminalId,
+      rows: rows,
+      cols: cols
+    });
+    const terminal_action = message.TerminalAction.fromPartial({
+      open
+    });
+    console.log("[WSS Terminal] Sending TerminalAction(open):", JSON.stringify(terminal_action));
+    this._ws?.sendMessage({ terminal_action });
+  }
+
+  private sendTerminalInput(terminalId: number, dataStr: string) {
+    console.log("[WSS Terminal] Sending TerminalAction(input) len:", dataStr ? dataStr.length : 0);
+    if (!dataStr) return;
+    const bytes = new TextEncoder().encode(dataStr);
+
+    const data = message.TerminalData.fromPartial({
+      terminal_id: terminalId,
+      data: bytes,
+      compressed: false
+    });
+    const terminal_action = message.TerminalAction.fromPartial({
+      data
+    });
+    this._ws?.sendMessage({ terminal_action });
+  }
+
+  private resizeTerminal(terminalId: number, rows: number, cols: number) {
+    const resize = message.ResizeTerminal.fromPartial({
+      terminal_id: terminalId,
+      rows: rows,
+      cols: cols
+    });
+    const terminal_action = message.TerminalAction.fromPartial({
+      resize
+    });
+    console.log("[WSS Terminal] Sending TerminalAction(resize):", JSON.stringify(terminal_action));
+    this._ws?.sendMessage({ terminal_action });
+  }
+
+  private closeTerminal(terminalId: number) {
+    const close = message.CloseTerminal.fromPartial({
+      terminal_id: terminalId
+    });
+    const terminal_action = message.TerminalAction.fromPartial({
+      close
+    });
+    console.log("[WSS Terminal] Sending TerminalAction(close):", JSON.stringify(terminal_action));
+    this._ws?.sendMessage({ terminal_action });
+  }
+
+  private async dispatchTerminalResponse(resp: message.TerminalResponse) {
+    console.log("[WSS Terminal] Received TerminalResponse from peer:", JSON.stringify(resp));
+    const terminalId = resp.opened ? resp.opened.terminal_id : (resp.data ? resp.data.terminal_id : (resp.closed ? resp.closed.terminal_id : (resp.error ? resp.error.terminal_id : 0)));
+    const evtData: Record<string, any> = {
+      name: 'terminal_response',
+      terminal_id: terminalId.toString(),
+    };
+
+    if (resp.opened) {
+      evtData.type = 'opened';
+      evtData.success = resp.opened.success;
+      evtData.message = resp.opened.message;
+      evtData.service_id = resp.opened.service_id;
+      evtData.persistent_sessions = resp.opened.persistent_sessions;
+    } 
+    else if (resp.data) {
+      evtData.type = 'data';
+      
+      let rawBytes: Uint8Array = resp.data.data;
+      if (resp.data.compressed) {
+        const decompressed = await decompress(rawBytes);
+        if (decompressed) {
+          rawBytes = decompressed;
+        } else {
+          console.error("[WSS Terminal] Failed to decompress terminal data!");
+        }
+      }
+
+      let binaryString = '';
+      for (let i = 0; i < rawBytes.length; i++) {
+        binaryString += String.fromCharCode(rawBytes[i]);
+      }
+      const safeBase64 = btoa(binaryString);
+
+      evtData.data = safeBase64;
+      evtData.compressed = false;
+    } 
+    else if (resp.closed) {
+      evtData.type = 'closed';
+      evtData.exit_code = resp.closed.exit_code;
+    } 
+    else if (resp.error) {
+      evtData.type = 'error';
+      evtData.message = resp.error.message;
+    }
+
+    console.log("[WSS Terminal] Dispatching terminal event to Dart:", JSON.stringify(evtData));
+    globals.pushEvent(evtData.name, evtData);
   }
 }
 
