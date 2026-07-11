@@ -177,6 +177,7 @@ jobs:
           # 2. Create raw release structure
           mkdir ./Release_Flutter
           mv ./flutter/build/windows/x64/runner/Release/* ./Release_Flutter/
+          Get-ChildItem ./Release_Flutter/*.exe | Rename-Item -NewName $env:NEW_EXE_NAME
 
           # Download usbmmidd_v2.zip and extract it to ./Release_Flutter
           Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
