@@ -1,0 +1,26 @@
+###检查虚拟打印机是否安装以防Dll初始化崩溃
+diff --git a/src/server/printer_service.rs b/src/server/printer_service.rs
+index edf5f3c1d..10415e000 100644
+--- a/src/server/printer_service.rs
++++ b/src/server/printer_service.rs
+@@ -106,6 +106,20 @@ fn get_lib_name() -> ResultType<String> {
+ }
+ 
+ pub fn init(app_name: &str) -> ResultType<()> {
++    #[cfg(windows)]
++    {
++        // If the printer is not installed on the system, skip initializing the DLL with custom names
++        // to prevent native Win32 crashes on startup.
++        if app_name != "RustDesk" {
++            if let Ok(installed) = remote_printer::is_rd_printer_installed(app_name) {
++                if !installed {
++                    log::info!("Custom printer '{} Printer' is not installed, skipping DLL init to prevent crash.", app_name);
++                    return Ok(());
++                }
++            }
++        }
++    }
++
+     let lib_wrapper = LIB_WRAPPER.lock().unwrap();
+     let Some(fn_init) = lib_wrapper.init.as_ref() else {
+         bail!("Failed to load func init");
