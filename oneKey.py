@@ -106,6 +106,55 @@ REPLACEMENTS = {
         ('Icon=rustdesk', f'Icon={NEW_PREFIX}'),
         ('StartupWMClass=rustdesk', f'StartupWMClass={NEW_PREFIX}')
     ],
+    "res/rustdesk.service": [
+        ('Description=RustDesk', f'Description={NEW_APP_NAME}'),
+        ('ExecStart=/usr/bin/rustdesk --service', f'ExecStart=/usr/bin/{NEW_PREFIX} --service'),
+        ('ExecStop=pkill -f "rustdesk --"', f'ExecStop=pkill -f "{NEW_PREFIX} --"'),
+        ('PIDFile=/run/rustdesk.pid', f'PIDFile=/run/{NEW_PREFIX}.pid')
+    ],
+    "res/DEBIAN/postinst": [
+        ('ln -f -s /usr/share/rustdesk/rustdesk /usr/bin/rustdesk', f'ln -f -s /usr/share/rustdesk/rustdesk /usr/bin/{NEW_PREFIX}'),
+        ('/etc/systemd/system/rustdesk.service', f'/etc/systemd/system/{NEW_PREFIX}.service'),
+        ('/usr/lib/systemd/system/rustdesk.service', f'/usr/lib/systemd/system/{NEW_PREFIX}.service'),
+        ('/usr/lib/systemd/user/rustdesk.service', f'/usr/lib/systemd/user/{NEW_PREFIX}.service'),
+        ('files/systemd/rustdesk.service', f'files/systemd/{NEW_PREFIX}.service'),
+        ('systemctl enable rustdesk', f'systemctl enable {NEW_PREFIX}'),
+        ('systemctl start rustdesk', f'systemctl start {NEW_PREFIX}'),
+        ('pkill -f "rustdesk --"', f'pkill -f "{NEW_PREFIX} --"')
+    ],
+    "res/DEBIAN/prerm": [
+        ('rm -f /usr/bin/rustdesk', f'rm -f /usr/bin/{NEW_PREFIX}'),
+        ('systemctl stop rustdesk', f'systemctl stop {NEW_PREFIX}'),
+        ('systemctl disable rustdesk', f'systemctl disable {NEW_PREFIX}'),
+        ('/etc/systemd/system/rustdesk.service', f'/etc/systemd/system/{NEW_PREFIX}.service'),
+        ('/usr/lib/systemd/system/rustdesk.service', f'/usr/lib/systemd/system/{NEW_PREFIX}.service'),
+        ('user stop rustdesk', f'user stop {NEW_PREFIX}'),
+        ('/usr/lib/systemd/user/rustdesk.service', f'/usr/lib/systemd/user/{NEW_PREFIX}.service')
+    ],
+    "res/rpm-flutter.spec": [
+        ('systemctl stop rustdesk', f'systemctl stop {NEW_PREFIX}'),
+        ('systemctl disable rustdesk', f'systemctl disable {NEW_PREFIX}'),
+        ('/usr/share/rustdesk/files/rustdesk.service', f'/usr/share/rustdesk/files/{NEW_PREFIX}.service'),
+        ('/usr/share/rustdesk/files/rustdesk.desktop', f'/usr/share/rustdesk/files/{NEW_PREFIX}.desktop'),
+        ('/usr/share/rustdesk/files/rustdesk-link.desktop', f'/usr/share/rustdesk/files/{NEW_PREFIX}-link.desktop'),
+        ('/etc/systemd/system/rustdesk.service', f'/etc/systemd/system/{NEW_PREFIX}.service'),
+        ('ln -sf /usr/share/rustdesk/rustdesk /usr/bin/rustdesk', f'ln -sf /usr/share/rustdesk/rustdesk /usr/bin/{NEW_PREFIX}'),
+        ('systemctl enable rustdesk', f'systemctl enable {NEW_PREFIX}'),
+        ('systemctl start rustdesk', f'systemctl start {NEW_PREFIX}'),
+        ('rm /usr/bin/rustdesk', f'rm /usr/bin/{NEW_PREFIX}')
+    ],
+    "res/rpm-flutter-suse.spec": [
+        ('systemctl stop rustdesk', f'systemctl stop {NEW_PREFIX}'),
+        ('systemctl disable rustdesk', f'systemctl disable {NEW_PREFIX}'),
+        ('/usr/share/rustdesk/files/rustdesk.service', f'/usr/share/rustdesk/files/{NEW_PREFIX}.service'),
+        ('/usr/share/rustdesk/files/rustdesk.desktop', f'/usr/share/rustdesk/files/{NEW_PREFIX}.desktop'),
+        ('/usr/share/rustdesk/files/rustdesk-link.desktop', f'/usr/share/rustdesk/files/{NEW_PREFIX}-link.desktop'),
+        ('/etc/systemd/system/rustdesk.service', f'/etc/systemd/system/{NEW_PREFIX}.service'),
+        ('ln -sf /usr/share/rustdesk/rustdesk /usr/bin/rustdesk', f'ln -sf /usr/share/rustdesk/rustdesk /usr/bin/{NEW_PREFIX}'),
+        ('systemctl enable rustdesk', f'systemctl enable {NEW_PREFIX}'),
+        ('systemctl start rustdesk', f'systemctl start {NEW_PREFIX}'),
+        ('rm /usr/bin/rustdesk', f'rm /usr/bin/{NEW_PREFIX}')
+    ],
     "flutter/lib/common.dart": [
         (OLD_LOAD_POWERED, NEW_LOAD_POWERED),
         ('https://rustdesk.com', NEW_URL)
@@ -260,6 +309,12 @@ def apply_customization():
             print(f"Success: Renamed res/rustdesk-link.desktop to res/{NEW_PREFIX}-link.desktop")
         except Exception as e:
             print(f"Error: Failed to rename res/rustdesk-link.desktop: {e}")
+    if os.path.exists("res/rustdesk.service"):
+        try:
+            os.rename("res/rustdesk.service", f"res/{NEW_PREFIX}.service")
+            print(f"Success: Renamed res/rustdesk.service to res/{NEW_PREFIX}.service")
+        except Exception as e:
+            print(f"Error: Failed to rename res/rustdesk.service: {e}")
 
     # ==========================================
     # Part 4: custom.txt dynamic decryption and write
