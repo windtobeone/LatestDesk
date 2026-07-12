@@ -15,34 +15,11 @@ jobs:
     if: github.event.client_payload.build_options.build_target_os == 'linux'
     uses: ./.github/workflows/bridge.yml
 
-  build-linux:
+  build-linux-x64:
     needs: [generate-bridge]
-    name: Build Branded Linux Client (${{ matrix.job.target }})
-    runs-on: ${{ matrix.job.on }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - {
-              arch: x86_64,
-              target: x86_64-unknown-linux-gnu,
-              distro: ubuntu18.04,
-              on: ubuntu-22.04,
-              deb_arch: amd64,
-              vcpkg-triplet: x64-linux,
-            }
-          - {
-              arch: aarch64,
-              target: aarch64-unknown-linux-gnu,
-              distro: ubuntu18.04,
-              on: ubuntu-22.04-arm,
-              deb_arch: arm64,
-              vcpkg-triplet: arm64-linux,
-            }
-    # Only run the job for the target architecture specified by the client_payload
-    if: |
-      github.event.client_payload.build_options.build_target_os == 'linux' &&
-      matrix.job.arch == (github.event.client_payload.build_options.arch == 'x64' && 'x86_64' || 'aarch64')
+    if: github.event.client_payload.build_options.build_target_os == 'linux' && github.event.client_payload.build_options.arch == 'x64'
+    name: Build Branded Linux Client (x64)
+    runs-on: ubuntu-22.04
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v6
@@ -57,10 +34,7 @@ jobs:
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /usr/share/dotnet
           sudo apt-get update -y
-          sudo apt-get install -y nasm
-          if [[ "${{ matrix.job.arch }}" == "x86_64" ]]; then
-            sudo apt-get install -y qemu-user-static
-          fi
+          sudo apt-get install -y nasm qemu-user-static
 
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -68,7 +42,6 @@ jobs:
           submodules: recursive
 
       - name: Set Swap Space
-        if: ${{ matrix.job.arch == 'x86_64' }}
         uses: pierotofy/set-swap-space@v1.0
         with:
           swap-size-gb: 12
@@ -77,7 +50,7 @@ jobs:
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
-          targets: ${{ matrix.job.target }}
+          targets: x86_64-unknown-linux-gnu
           components: "rustfmt"
 
       - name: Save Rust toolchain version
@@ -105,7 +78,7 @@ jobs:
       - name: Install vcpkg dependencies
         run: |
           sudo apt install -y libva-dev
-          if ! $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"; then
+          if ! $VCPKG_ROOT/vcpkg install --triplet x64-linux --x-install-root="$VCPKG_ROOT/installed"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
               echo "======"
@@ -152,8 +125,8 @@ jobs:
         name: Build rustdesk
         id: vcpkg
         with:
-          arch: ${{ matrix.job.arch }}
-          distro: ${{ matrix.job.distro }}
+          arch: x86_64
+          distro: ubuntu18.04
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
@@ -169,56 +142,29 @@ jobs:
           run: |
             git config --global --add safe.directory "*"
             pushd /opt
-            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}.tar.gz
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-x86_64-unknown-linux-gnu.tar.gz
             tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
-            cd rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }} && ./install.sh
-            rm -rf rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}
+            cd rust-${{env.RUST_TOOLCHAIN_VERSION}}-x86_64-unknown-linux-gnu && ./install.sh
+            rm -rf rust-${{env.RUST_TOOLCHAIN_VERSION}}-x86_64-unknown-linux-gnu
             mkdir -p ~/.cargo/
             echo -e "[source.crates-io]\nregistry = 'https://github.com/rust-lang/crates.io-index'" > ~/.cargo/config
             pushd /workspace
             export VCPKG_ROOT=/opt/artifacts/vcpkg
-            if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
-              export JOBS="--jobs 3"
-            else
-              export JOBS=""
-            fi
-            cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste --release
+            cargo build --locked --lib --features hwcodec,flutter,unix-file-copy-paste --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo
 
             # Setup Flutter
             pushd /workspace
-            if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
-              export PATH=/opt/flutter-elinux/bin:$PATH
-              sed -i "s/flutter build linux --release/flutter-elinux build linux --verbose/g" ./build.py
-              sed -i "s/x64\/release/arm64\/release/g" ./build.py
-            else
-              export PATH=/opt/flutter/bin:$PATH
-            fi
+            export PATH=/opt/flutter/bin:$PATH
             popd
             pushd /opt
             wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
             tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
-            if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
-              git clone https://github.com/sony/flutter-elinux.git || true
-              pushd flutter-elinux
-              git fetch
-              git reset --hard ${{ env.FLUTTER_VERSION }}
-              bin/flutter-elinux doctor -v
-              bin/flutter-elinux precache --linux
-              popd
-              cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
-              rm -rf flutter
-            else
-              flutter doctor -v
-            fi
+            flutter doctor -v
 
             if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
-              if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
-                pushd /opt/flutter-elinux/flutter
-              else
-                pushd /opt/flutter
-              fi
+              pushd /opt/flutter
               git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
               popd
             fi
@@ -226,25 +172,212 @@ jobs:
             # Build and package based on selected distro
             pushd /workspace
             export CARGO_INCREMENTAL=0
-            export DEB_ARCH=${{ matrix.job.deb_arch }}
+            export DEB_ARCH=amd64
             python3 ./build.py --flutter --skip-cargo
 
             DISTRO="${{ github.event.client_payload.build_options.distro }}"
             if [ "$DISTRO" = "fedora" ]; then
               echo -e "Packaging fedora RPM"
-              if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
-                sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter.spec
-              fi
               HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
-              pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+              pushd ~/rpmbuild/RPMS/x86_64
               mv rustdesk*??.rpm /workspace/${NEW_EXE_NAME}
             elif [ "$DISTRO" = "suse" ]; then
               echo -e "Packaging SUSE RPM"
-              if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
-                sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter-suse.spec
-              fi
               HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
-              pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+              pushd ~/rpmbuild/RPMS/x86_64
+              mv rustdesk*??.rpm /workspace/${NEW_EXE_NAME}
+            else
+              # debian (default deb)
+              mv rustdesk*??.deb /workspace/${NEW_EXE_NAME}
+            fi
+
+      - name: Zip finished custom client package
+        run: |
+          zip -r custom_client.zip ./${{ github.event.client_payload.client_exe_name }}
+
+      - name: Upload Finished Custom Client Zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.client_payload.client_guid }}-linux
+          path: ./custom_client.zip
+
+  build-linux-arm64:
+    needs: [generate-bridge]
+    if: github.event.client_payload.build_options.build_target_os == 'linux' && github.event.client_payload.build_options.arch == 'arm64'
+    name: Build Branded Linux Client (arm64)
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo apt-get update -y
+          sudo apt-get install -y nasm
+
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-unknown-linux-gnu
+          components: "rustfmt"
+
+      - name: Save Rust toolchain version
+        run: |
+          RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
+          echo "RUST_TOOLCHAIN_VERSION=$RUST_TOOLCHAIN_VERSION" >> $GITHUB_ENV
+
+      - name: Disable rust bridge build
+        run: |
+          sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          sudo apt install -y libva-dev
+          if ! $VCPKG_ROOT/vcpkg install --triplet arm64-linux --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
+          fi
+        shell: bash
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Pillow for Icon Generation
+        run: |
+          python -m pip install --upgrade pip
+          pip install Pillow
+
+      - name: Generate Custom Icons and Assets
+        run: |
+          echo "${{ github.event.client_payload.logo_png_base64 }}" > logo_base64.txt
+          python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name }}"
+
+      - name: Setup Custom Environment variables for oneKey.py
+        shell: bash
+        run: |
+          echo "NEW_APP_NAME=${{ github.event.client_payload.client_name }}" >> $GITHUB_ENV
+          echo "NEW_EXE_NAME=${{ github.event.client_payload.client_exe_name }}" >> $GITHUB_ENV
+          echo "NEW_PREFIX=${{ github.event.client_payload.client_prefix }}" >> $GITHUB_ENV
+          echo "NEW_IP=${{ github.event.client_payload.relay_host }}" >> $GITHUB_ENV
+          echo "NEW_PUB_KEY=${{ github.event.client_payload.relay_key }}" >> $GITHUB_ENV
+          echo "NEW_API_SERVER=${{ github.event.client_payload.api_server }}" >> $GITHUB_ENV
+          echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 }}" >> $GITHUB_ENV
+          echo "APPLY_PATCHES=${{ github.event.client_payload.build_options.apply_patches }}" >> $GITHUB_ENV
+
+      - name: Run Customize Script and Apply Patches
+        run: |
+          python oneKey.py
+
+      - uses: rustdesk-org/run-on-arch-action@v2
+        name: Build rustdesk
+        id: vcpkg
+        with:
+          arch: aarch64
+          distro: ubuntu18.04
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+            ls -l /opt/artifacts/vcpkg/installed
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+          shell: /bin/bash
+          install: |
+            apt-get update -y
+            apt-get install -y build-essential clang cmake curl gcc git g++ libayatana-appindicator3-dev libasound2-dev libclang-10-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgtk-3-dev libpam0g-dev libpulse-dev libva-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxdo-dev libxfixes-dev llvm-10-dev nasm ninja-build pkg-config tree python3 rpm unzip wget xz-utils libssl-dev
+            apt-get remove -y libopus-dev || true
+          run: |
+            git config --global --add safe.directory "*"
+            pushd /opt
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-aarch64-unknown-linux-gnu.tar.gz
+            tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
+            cd rust-${{env.RUST_TOOLCHAIN_VERSION}}-aarch64-unknown-linux-gnu && ./install.sh
+            rm -rf rust-${{env.RUST_TOOLCHAIN_VERSION}}-aarch64-unknown-linux-gnu
+            mkdir -p ~/.cargo/
+            echo -e "[source.crates-io]\nregistry = 'https://github.com/rust-lang/crates.io-index'" > ~/.cargo/config
+            pushd /workspace
+            export VCPKG_ROOT=/opt/artifacts/vcpkg
+            cargo build --locked --lib --jobs 3 --features hwcodec,flutter,unix-file-copy-paste --release
+            rm -rf target/release/deps target/release/build
+            rm -rf ~/.cargo
+
+            # Setup Flutter
+            pushd /workspace
+            export PATH=/opt/flutter-elinux/bin:$PATH
+            sed -i "s/flutter build linux --release/flutter-elinux build linux --verbose/g" ./build.py
+            sed -i "s/x64\/release/arm64\/release/g" ./build.py
+            popd
+            pushd /opt
+            wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            git clone https://github.com/sony/flutter-elinux.git || true
+            pushd flutter-elinux
+            git fetch
+            git reset --hard ${{ env.FLUTTER_VERSION }}
+            bin/flutter-elinux doctor -v
+            bin/flutter-elinux precache --linux
+            popd
+            cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
+            rm -rf flutter
+
+            if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
+              pushd /opt/flutter-elinux/flutter
+              git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+              popd
+            fi
+
+            # Build and package based on selected distro
+            pushd /workspace
+            export CARGO_INCREMENTAL=0
+            export DEB_ARCH=arm64
+            python3 ./build.py --flutter --skip-cargo
+
+            DISTRO="${{ github.event.client_payload.build_options.distro }}"
+            if [ "$DISTRO" = "fedora" ]; then
+              echo -e "Packaging fedora RPM"
+              sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter.spec
+              HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
+              pushd ~/rpmbuild/RPMS/aarch64
+              mv rustdesk*??.rpm /workspace/${NEW_EXE_NAME}
+            elif [ "$DISTRO" = "suse" ]; then
+              echo -e "Packaging SUSE RPM"
+              sed -i "s/linux\/x64/linux\/arm64/g" ./res/rpm-flutter-suse.spec
+              HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
+              pushd ~/rpmbuild/RPMS/aarch64
               mv rustdesk*??.rpm /workspace/${NEW_EXE_NAME}
             else
               # debian (default deb)

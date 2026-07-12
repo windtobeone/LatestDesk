@@ -516,6 +516,7 @@ jobs:
     needs: [build-windows-flutter, build-windows-sciter-x64, build-windows-sciter-x86]
     if: |
       always() &&
+      (github.event_name == 'workflow_dispatch' || github.event.client_payload.build_options.build_target_os == 'windows') &&
       (needs.build-windows-flutter.result == 'success' || needs.build-windows-flutter.result == 'skipped') &&
       (needs.build-windows-sciter-x64.result == 'success' || needs.build-windows-sciter-x64.result == 'skipped') &&
       (needs.build-windows-sciter-x86.result == 'success' || needs.build-windows-sciter-x86.result == 'skipped')
