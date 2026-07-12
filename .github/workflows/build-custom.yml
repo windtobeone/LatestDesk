@@ -32,6 +32,18 @@ on:
       apply_patches:
         description: 'Comma-separated patch ids to apply (e.g. 03)'
         required: false
+      build_flutter:
+        description: 'Build Windows Flutter Client'
+        type: boolean
+        default: true
+      build_sciter_x64:
+        description: 'Build Windows Sciter 64-bit Client'
+        type: boolean
+        default: true
+      build_sciter_x86:
+        description: 'Build Windows Sciter 32-bit Client'
+        type: boolean
+        default: true
   repository_dispatch:
     types: [build-custom-client]
 
@@ -56,6 +68,9 @@ jobs:
       target_version: Windows10
 
   build-windows-flutter:
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build_flutter == 'true') ||
+      (github.event_name == 'repository_dispatch' && github.event.client_payload.build_flutter != 'false')
     name: Build Branded Windows Flutter Client (64-bit)
     needs: [generate-bridge, build-RustDeskTempTopMostWindow]
     runs-on: windows-2022
@@ -233,7 +248,9 @@ jobs:
           path: ./flutter_out/
 
   build-windows-sciter-x64:
-    if: false
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build_sciter_x64 == 'true') ||
+      (github.event_name == 'repository_dispatch' && github.event.client_payload.build_sciter_x64 != 'false')
     name: Build Branded Windows Sciter Client (64-bit)
     runs-on: windows-2022
     steps:
@@ -360,7 +377,9 @@ jobs:
           path: ./sciter_x64_out/
 
   build-windows-sciter-x86:
-    if: false
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build_sciter_x86 == 'true') ||
+      (github.event_name == 'repository_dispatch' && github.event.client_payload.build_sciter_x86 != 'false')
     name: Build Branded Windows Sciter Client (32-bit)
     runs-on: windows-2022
     steps:
@@ -492,19 +511,44 @@ jobs:
 
   merge-and-package:
     name: Merge and Package All Clients
-    needs: [build-windows-flutter]
+    needs: [build-windows-flutter, build-windows-sciter-x64, build-windows-sciter-x86]
+    if: |
+      always() &&
+      (needs.build-windows-flutter.result == 'success' || needs.build-windows-flutter.result == 'skipped') &&
+      (needs.build-windows-sciter-x64.result == 'success' || needs.build-windows-sciter-x64.result == 'skipped') &&
+      (needs.build-windows-sciter-x86.result == 'success' || needs.build-windows-sciter-x86.result == 'skipped')
     runs-on: windows-2022
     steps:
       - name: Create Final Packages directory
         run: |
           mkdir ./finished_client
-          mkdir ./finished_client/Flutter_Win10_x64
 
       - name: Download Flutter Client
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.build_flutter == 'true') ||
+          (github.event_name == 'repository_dispatch' && github.event.client_payload.build_flutter != 'false')
         uses: actions/download-artifact@v4
         with:
           name: custom-flutter-client
           path: ./finished_client/Flutter_Win10_x64
+
+      - name: Download Sciter x64 Client
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.build_sciter_x64 == 'true') ||
+          (github.event_name == 'repository_dispatch' && github.event.client_payload.build_sciter_x64 != 'false')
+        uses: actions/download-artifact@v4
+        with:
+          name: custom-sciter-x64-client
+          path: ./finished_client/Sciter_Win7_Legacy_x64
+
+      - name: Download Sciter x86 Client
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.build_sciter_x86 == 'true') ||
+          (github.event_name == 'repository_dispatch' && github.event.client_payload.build_sciter_x86 != 'false')
+        uses: actions/download-artifact@v4
+        with:
+          name: custom-sciter-x86-client
+          path: ./finished_client/Sciter_Win7_Legacy_x86
 
       - name: Zip finished custom client package
         run: |

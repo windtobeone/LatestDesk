@@ -240,24 +240,6 @@ def apply_customization():
     apply_patches_str = os.getenv("APPLY_PATCHES", "")
     patch_ids = [p.strip() for p in apply_patches_str.split(",") if p.strip()] if apply_patches_str else []
     
-    # Auto-detect incoming-only config to trigger patch 08
-    if custom_txt_b64:
-        try:
-            decoded = base64.b64decode(custom_txt_b64.strip())
-            if len(decoded) > 64:
-                payload = decoded[64:]
-                try:
-                    import json
-                    config_data = json.loads(payload.decode('utf-8'))
-                    if config_data.get("conn-type") == "incoming":
-                        print("Info: incoming-only client configuration detected, auto enabling patch '08'")
-                        if "08" not in patch_ids:
-                            patch_ids.append("08")
-                except Exception as je:
-                    print(f"Warning: Failed to parse JSON config payload: {je}")
-        except Exception as e:
-            print(f"Warning: Failed to decode custom_txt_b64: {e}")
-
         # Auto-enable patch 09 (printer Win32 crash check) to prevent native DLL crashes in customized clients
         if "09" not in patch_ids:
             print("Info: Custom client detected, auto enabling patch '09' (printer DLL Win32 check)")
