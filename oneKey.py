@@ -79,7 +79,32 @@ REPLACEMENTS = {
         ('rustdesk_portable.exe', f'{NEW_PREFIX}_portable.exe'),
         ('rustdesk-{version}-install.exe', f'{NEW_PREFIX}-{{version}}-install.exe'),
         ('target\\release\\rustdesk.exe', f'target\\release\\{NEW_EXE_NAME}'),
-        ('target/release/rustdesk.exe', f'target/release/{NEW_EXE_NAME}')
+        ('target/release/rustdesk.exe', f'target/release/{NEW_EXE_NAME}'),
+        ('cp ../res/rustdesk.desktop', f'cp ../res/{NEW_PREFIX}.desktop'),
+        ('tmpdeb/usr/share/applications/rustdesk.desktop', f'tmpdeb/usr/share/applications/{NEW_PREFIX}.desktop'),
+        ('cp ../res/rustdesk-link.desktop', f'cp ../res/{NEW_PREFIX}-link.desktop'),
+        ('tmpdeb/usr/share/applications/rustdesk-link.desktop', f'tmpdeb/usr/share/applications/{NEW_PREFIX}-link.desktop'),
+        ('cp res/rustdesk.desktop', f'cp res/{NEW_PREFIX}.desktop'),
+        ('cp res/rustdesk-link.desktop', f'cp res/{NEW_PREFIX}-link.desktop'),
+        ('apps/rustdesk.png', f'apps/{NEW_PREFIX}.png'),
+        ('apps/rustdesk.svg', f'apps/{NEW_PREFIX}.svg')
+    ],
+    "flutter/linux/my_application.cc": [
+        ('theme, "rustdesk"', f'theme, "{NEW_PREFIX}"')
+    ],
+    "res/rustdesk.desktop": [
+        ('Name=RustDesk', f'Name={NEW_APP_NAME}'),
+        ('Exec=rustdesk %u', f'Exec={NEW_PREFIX} %u'),
+        ('Icon=rustdesk', f'Icon={NEW_PREFIX}'),
+        ('StartupWMClass=rustdesk', f'StartupWMClass={NEW_PREFIX}')
+    ],
+    "res/rustdesk-link.desktop": [
+        ('Name=RustDesk', f'Name={NEW_APP_NAME}'),
+        ('MimeType=x-scheme-handler/rustdesk;', f'MimeType=x-scheme-handler/{NEW_PREFIX};'),
+        ('TryExec=rustdesk', f'TryExec={NEW_PREFIX}'),
+        ('Exec=rustdesk %u', f'Exec={NEW_PREFIX} %u'),
+        ('Icon=rustdesk', f'Icon={NEW_PREFIX}'),
+        ('StartupWMClass=rustdesk', f'StartupWMClass={NEW_PREFIX}')
     ],
     "flutter/lib/common.dart": [
         (OLD_LOAD_POWERED, NEW_LOAD_POWERED),
@@ -130,7 +155,8 @@ REPLACEMENTS = {
         ('"https://rustdesk.com/docs/en/manual/linux/#x11-required"', f'"{NEW_URL}/"'),
         ('"https://github.com/rustdesk/rustdesk/wiki/Headless-Linux-Support"', f'"{NEW_URL}/"'),
         ('&["rs-ny.rustdesk.com"]', f'&["{NEW_IP}"]'),
-        ('"OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw="', f'"{NEW_PUB_KEY}"')
+        ('"OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw="', f'"{NEW_PUB_KEY}"'),
+        ('pub static ref PROD_RENDEZVOUS_SERVER: RwLock<String> = RwLock::new("".to_owned());', f'pub static ref PROD_RENDEZVOUS_SERVER: RwLock<String> = RwLock::new("{NEW_IP}".to_owned());')
     ],
     "libs/hbb_common/src/lib.rs": [
         ('"https://api.rustdesk.com/version/latest"', f'"{NEW_URL}/version/latest"')
@@ -220,6 +246,20 @@ def apply_customization():
     print("\n" + "="*35)
     print(f"Customization done! Successfully modified {success_count} files, skipped/failed {fail_count} files.")
     print("="*35)
+
+    # Rename desktop files to NEW_PREFIX
+    if os.path.exists("res/rustdesk.desktop"):
+        try:
+            os.rename("res/rustdesk.desktop", f"res/{NEW_PREFIX}.desktop")
+            print(f"Success: Renamed res/rustdesk.desktop to res/{NEW_PREFIX}.desktop")
+        except Exception as e:
+            print(f"Error: Failed to rename res/rustdesk.desktop: {e}")
+    if os.path.exists("res/rustdesk-link.desktop"):
+        try:
+            os.rename("res/rustdesk-link.desktop", f"res/{NEW_PREFIX}-link.desktop")
+            print(f"Success: Renamed res/rustdesk-link.desktop to res/{NEW_PREFIX}-link.desktop")
+        except Exception as e:
+            print(f"Error: Failed to rename res/rustdesk-link.desktop: {e}")
 
     # ==========================================
     # Part 4: custom.txt dynamic decryption and write
