@@ -56,9 +56,11 @@ env:
 
 jobs:
   generate-bridge:
+    if: github.event_name == 'workflow_dispatch' || github.event.client_payload.build_options.build_target_os == 'windows'
     uses: ./.github/workflows/bridge.yml
 
   build-RustDeskTempTopMostWindow:
+    if: github.event_name == 'workflow_dispatch' || github.event.client_payload.build_options.build_target_os == 'windows'
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
       upload-artifact: true

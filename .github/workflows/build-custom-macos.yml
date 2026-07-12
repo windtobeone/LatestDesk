@@ -1,0 +1,185 @@
+name: Build Custom macOS Client
+on:
+  repository_dispatch:
+    types: [build-custom-client]
+
+env:
+  MAC_RUST_VERSION: "1.81"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VERSION: "1.4.7"
+
+jobs:
+  generate-bridge:
+    if: github.event.client_payload.build_options.build_target_os == 'macos'
+    uses: ./.github/workflows/bridge.yml
+
+  build-macos:
+    needs: [generate-bridge]
+    if: github.event.client_payload.build_options.build_target_os == 'macos'
+    name: Build Branded macOS Client (${{ matrix.job.arch }})
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              target: x86_64-apple-darwin,
+              os: macos-13,
+              arch: x64,
+              vcpkg-triplet: x64-osx,
+              extra-build-args: ""
+            }
+          - {
+              target: aarch64-apple-darwin,
+              os: macos-14,
+              arch: arm64,
+              vcpkg-triplet: arm64-osx,
+              extra-build-args: "--screencapturekit"
+            }
+    # Only run the job for the target architecture specified by the client_payload
+    if: |
+      github.event.client_payload.build_options.build_target_os == 'macos' &&
+      matrix.job.arch == github.event.client_payload.build_options.arch
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install build runtime
+        run: |
+          brew install llvm create-dmg
+          if command -v pkg-config &>/dev/null; then
+              echo "pkg-config is already installed"
+          else
+              brew install pkg-config
+          fi
+
+      - name: Install NASM
+        run: |
+          wget https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip
+          unzip nasm-2.16.03-macosx.zip
+          sudo cp nasm-2.16.03/nasm /usr/local/bin/nasm
+          nasm --version
+
+      - name: Install flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Patch flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Workaround for flutter issue
+        shell: bash
+        run: |
+          cd "$(dirname "$(which flutter)")"
+          sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.MAC_RUST_VERSION }}
+          targets: ${{ matrix.job.target }}
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.job.os }}-macos-custom
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Pillow for Icon Generation
+        run: |
+          python -m pip install --upgrade pip
+          pip install Pillow
+
+      - name: Generate Custom Icons and Assets
+        run: |
+          echo "${{ github.event.client_payload.logo_png_base64 }}" > logo_base64.txt
+          python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name }}"
+
+      - name: Setup Custom Environment variables for oneKey.py
+        shell: bash
+        run: |
+          echo "NEW_APP_NAME=${{ github.event.client_payload.client_name }}" >> $GITHUB_ENV
+          echo "NEW_EXE_NAME=${{ github.event.client_payload.client_exe_name }}" >> $GITHUB_ENV
+          echo "NEW_PREFIX=${{ github.event.client_payload.client_prefix }}" >> $GITHUB_ENV
+          echo "NEW_IP=${{ github.event.client_payload.relay_host }}" >> $GITHUB_ENV
+          echo "NEW_PUB_KEY=${{ github.event.client_payload.relay_key }}" >> $GITHUB_ENV
+          echo "NEW_API_SERVER=${{ github.event.client_payload.api_server }}" >> $GITHUB_ENV
+          echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 }}" >> $GITHUB_ENV
+          echo "APPLY_PATCHES=${{ github.event.client_payload.build_options.apply_patches }}" >> $GITHUB_ENV
+          echo "MACOS_NO_PADDING=${{ github.event.client_payload.build_options.noPadding }}" >> $GITHUB_ENV
+
+      - name: Run Customize Script and Apply Patches
+        run: |
+          python oneKey.py
+
+      - name: Build macOS Custom Client
+        run: |
+          if [ "${{ matrix.job.target }}" = "aarch64-apple-darwin" ]; then
+            MIN_MACOS_VERSION="12.3"
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
+            sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
+            sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\//" Cargo.toml
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
+          fi
+          ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
+
+      - name: Create Unsigned DMG package
+        run: |
+          CREATE_DMG="$(command -v create-dmg)"
+          CREATE_DMG="$(readlink -f "$CREATE_DMG")"
+          sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
+          create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 "${{ github.event.client_payload.client_exe_name }}" ./flutter/build/macos/Build/Products/Release/RustDesk.app
+
+      - name: Zip finished custom client package
+        run: |
+          zip -r custom_client.zip ./${{ github.event.client_payload.client_exe_name }}
+
+      - name: Upload Finished Custom Client Zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.client_payload.client_guid }}-macos
+          path: ./custom_client.zip
