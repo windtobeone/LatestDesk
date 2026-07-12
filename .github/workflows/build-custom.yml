@@ -70,7 +70,10 @@ jobs:
   build-windows-flutter:
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.build_flutter == 'true') ||
-      (github.event_name == 'repository_dispatch' && github.event.client_payload.build_flutter != 'false')
+      (github.event_name == 'repository_dispatch' && (
+        !contains(github.event.client_payload.apply_patches, 'build_') ||
+        contains(github.event.client_payload.apply_patches, 'build_flutter')
+      ))
     name: Build Branded Windows Flutter Client (64-bit)
     needs: [generate-bridge, build-RustDeskTempTopMostWindow]
     runs-on: windows-2022
@@ -250,7 +253,10 @@ jobs:
   build-windows-sciter-x64:
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.build_sciter_x64 == 'true') ||
-      (github.event_name == 'repository_dispatch' && github.event.client_payload.build_sciter_x64 != 'false')
+      (github.event_name == 'repository_dispatch' && (
+        !contains(github.event.client_payload.apply_patches, 'build_') ||
+        contains(github.event.client_payload.apply_patches, 'build_sciter_x64')
+      ))
     name: Build Branded Windows Sciter Client (64-bit)
     runs-on: windows-2022
     steps:
@@ -379,7 +385,10 @@ jobs:
   build-windows-sciter-x86:
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.build_sciter_x86 == 'true') ||
-      (github.event_name == 'repository_dispatch' && github.event.client_payload.build_sciter_x86 != 'false')
+      (github.event_name == 'repository_dispatch' && (
+        !contains(github.event.client_payload.apply_patches, 'build_') ||
+        contains(github.event.client_payload.apply_patches, 'build_sciter_x86')
+      ))
     name: Build Branded Windows Sciter Client (32-bit)
     runs-on: windows-2022
     steps:
@@ -526,7 +535,10 @@ jobs:
       - name: Download Flutter Client
         if: |
           (github.event_name == 'workflow_dispatch' && github.event.inputs.build_flutter == 'true') ||
-          (github.event_name == 'repository_dispatch' && github.event.client_payload.build_flutter != 'false')
+          (github.event_name == 'repository_dispatch' && (
+            !contains(github.event.client_payload.apply_patches, 'build_') ||
+            contains(github.event.client_payload.apply_patches, 'build_flutter')
+          ))
         uses: actions/download-artifact@v4
         with:
           name: custom-flutter-client
@@ -535,7 +547,10 @@ jobs:
       - name: Download Sciter x64 Client
         if: |
           (github.event_name == 'workflow_dispatch' && github.event.inputs.build_sciter_x64 == 'true') ||
-          (github.event_name == 'repository_dispatch' && github.event.client_payload.build_sciter_x64 != 'false')
+          (github.event_name == 'repository_dispatch' && (
+            !contains(github.event.client_payload.apply_patches, 'build_') ||
+            contains(github.event.client_payload.apply_patches, 'build_sciter_x64')
+          ))
         uses: actions/download-artifact@v4
         with:
           name: custom-sciter-x64-client
@@ -544,7 +559,10 @@ jobs:
       - name: Download Sciter x86 Client
         if: |
           (github.event_name == 'workflow_dispatch' && github.event.inputs.build_sciter_x86 == 'true') ||
-          (github.event_name == 'repository_dispatch' && github.event.client_payload.build_sciter_x86 != 'false')
+          (github.event_name == 'repository_dispatch' && (
+            !contains(github.event.client_payload.apply_patches, 'build_') ||
+            contains(github.event.client_payload.apply_patches, 'build_sciter_x86')
+          ))
         uses: actions/download-artifact@v4
         with:
           name: custom-sciter-x86-client
