@@ -240,10 +240,10 @@ def apply_customization():
     apply_patches_str = os.getenv("APPLY_PATCHES", "")
     patch_ids = [p.strip() for p in apply_patches_str.split(",") if p.strip()] if apply_patches_str else []
     
-        # Auto-enable patch 09 (printer Win32 crash check) to prevent native DLL crashes in customized clients
-        if "09" not in patch_ids:
-            print("Info: Custom client detected, auto enabling patch '09' (printer DLL Win32 check)")
-            patch_ids.append("09")
+    # Auto-enable patch 09 (printer Win32 crash check) to prevent native DLL crashes in customized clients
+    if "09" not in patch_ids:
+        print("Info: Custom client detected, auto enabling patch '09' (printer DLL Win32 check)")
+        patch_ids.append("09")
 
     if patch_ids:
         print(f"Info: Found patches to apply: {patch_ids}")
