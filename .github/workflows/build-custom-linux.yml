@@ -121,7 +121,7 @@ jobs:
         run: |
           python oneKey.py
 
-      - uses: rustdesk-org/run-on-arch-action@v2
+      - uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8
         name: Build rustdesk
         id: vcpkg
         with:
@@ -302,7 +302,7 @@ jobs:
         run: |
           python oneKey.py
 
-      - uses: rustdesk-org/run-on-arch-action@v2
+      - uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8
         name: Build rustdesk
         id: vcpkg
         with:
