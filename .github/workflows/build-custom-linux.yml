@@ -17,7 +17,6 @@ jobs:
 
   build-linux:
     needs: [generate-bridge]
-    if: github.event.client_payload.build_options.build_target_os == 'linux'
     name: Build Branded Linux Client (${{ matrix.job.target }})
     runs-on: ${{ matrix.job.on }}
     strategy:
