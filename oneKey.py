@@ -255,6 +255,17 @@ REPLACEMENTS = {
         ('App::new("rustdesk")', f'App::new("{NEW_PREFIX}")'),
         ('"Purslane Ltd<info@rustdesk.com>"', f'"{NEW_EMAIL}"'),
         ('about("RustDesk command line tool")', f'about("{NEW_EXE_BASE_NAME} command line tool")')
+    ],
+    "build.py": [
+        ('cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/', f'cp ../res/{NEW_PREFIX}.service tmpdeb/usr/share/rustdesk/files/systemd/{NEW_PREFIX}.service'),
+        ('cp res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/', f'cp res/{NEW_PREFIX}.service tmpdeb/usr/share/rustdesk/files/systemd/{NEW_PREFIX}.service'),
+        ('apps/rustdesk.png', f'apps/{NEW_PREFIX}.png'),
+        ('apps/rustdesk.svg', f'apps/{NEW_PREFIX}.svg'),
+        ('applications/rustdesk.desktop', f'applications/{NEW_PREFIX}.desktop'),
+        ('applications/rustdesk-link.desktop', f'applications/{NEW_PREFIX}-link.desktop'),
+        ('cp ../res/rustdesk.desktop', f'cp ../res/{NEW_PREFIX}.desktop'),
+        ('cp ../res/rustdesk-link.desktop', f'cp ../res/{NEW_PREFIX}-link.desktop'),
+        ("rustdesk.deb", f"{NEW_PREFIX}.deb")
     ]
 }
 
