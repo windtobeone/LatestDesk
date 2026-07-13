@@ -113,7 +113,8 @@ REPLACEMENTS = {
         ('PIDFile=/run/rustdesk.pid', f'PIDFile=/run/{NEW_PREFIX}.pid')
     ],
     "res/DEBIAN/postinst": [
-        ('ln -f -s /usr/share/rustdesk/rustdesk /usr/bin/rustdesk', f'ln -f -s /usr/share/rustdesk/rustdesk /usr/bin/{NEW_PREFIX}'),
+        ('ln -f -s /usr/share/rustdesk/rustdesk /usr/bin/rustdesk', f'ln -f -s /usr/share/{NEW_PREFIX}/{NEW_EXE_BASE_NAME} /usr/bin/{NEW_PREFIX}'),
+        ('/usr/share/rustdesk', f'/usr/share/{NEW_PREFIX}'),
         ('/etc/systemd/system/rustdesk.service', f'/etc/systemd/system/{NEW_PREFIX}.service'),
         ('/usr/lib/systemd/system/rustdesk.service', f'/usr/lib/systemd/system/{NEW_PREFIX}.service'),
         ('/usr/lib/systemd/user/rustdesk.service', f'/usr/lib/systemd/user/{NEW_PREFIX}.service'),
@@ -129,7 +130,8 @@ REPLACEMENTS = {
         ('/etc/systemd/system/rustdesk.service', f'/etc/systemd/system/{NEW_PREFIX}.service'),
         ('/usr/lib/systemd/system/rustdesk.service', f'/usr/lib/systemd/system/{NEW_PREFIX}.service'),
         ('user stop rustdesk', f'user stop {NEW_PREFIX}'),
-        ('/usr/lib/systemd/user/rustdesk.service', f'/usr/lib/systemd/user/{NEW_PREFIX}.service')
+        ('/usr/lib/systemd/user/rustdesk.service', f'/usr/lib/systemd/user/{NEW_PREFIX}.service'),
+        ("grep -E 'rustdesk +--server'", f"grep -E '{NEW_PREFIX} +--server'")
     ],
     "res/rpm-flutter.spec": [
         ('systemctl stop rustdesk', f'systemctl stop {NEW_PREFIX}'),
@@ -189,6 +191,10 @@ REPLACEMENTS = {
     "flutter/windows/CMakeLists.txt": [
         ('project(rustdesk LANGUAGES CXX)', f'project({NEW_EXE_BASE_NAME} LANGUAGES CXX)'),
         ('set(BINARY_NAME "rustdesk")', f'set(BINARY_NAME "{NEW_EXE_BASE_NAME}")')
+    ],
+    "flutter/linux/CMakeLists.txt": [
+        ('set(BINARY_NAME "rustdesk")', f'set(BINARY_NAME "{NEW_EXE_BASE_NAME}")'),
+        ('set(APPLICATION_ID "com.carriez.flutter_hbb")', f'set(APPLICATION_ID "com.{NEW_DOMAIN}.{NEW_PREFIX}")')
     ],
     "flutter/windows/runner/Runner.rc": [
         ('"CompanyName", "Purslane Ltd"', f'"CompanyName", "{NEW_DOMAIN}"'),
@@ -257,15 +263,31 @@ REPLACEMENTS = {
         ('about("RustDesk command line tool")', f'about("{NEW_EXE_BASE_NAME} command line tool")')
     ],
     "build.py": [
-        ('cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/', f'cp ../res/{NEW_PREFIX}.service tmpdeb/usr/share/rustdesk/files/systemd/{NEW_PREFIX}.service'),
-        ('cp res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/', f'cp res/{NEW_PREFIX}.service tmpdeb/usr/share/rustdesk/files/systemd/{NEW_PREFIX}.service'),
+        ('set(BINARY_NAME "rustdesk")', f'set(BINARY_NAME "{NEW_EXE_BASE_NAME}")'),
+        ('Package: rustdesk', f'Package: {NEW_PREFIX}'),
+        ('Maintainer: rustdesk <info@rustdesk.com>', f'Maintainer: {NEW_PREFIX} <{NEW_EMAIL}>'),
+        ('Homepage: https://rustdesk.com', f'Homepage: {NEW_URL}'),
+        ('cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/', f'cp ../res/{NEW_PREFIX}.service tmpdeb/usr/share/{NEW_PREFIX}/files/systemd/{NEW_PREFIX}.service'),
+        ('cp res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/', f'cp res/{NEW_PREFIX}.service tmpdeb/usr/share/{NEW_PREFIX}/files/systemd/{NEW_PREFIX}.service'),
+        ('tmpdeb/usr/share/rustdesk', f'tmpdeb/usr/share/{NEW_PREFIX}'),
+        ('tmpdeb/etc/rustdesk', f'tmpdeb/etc/{NEW_PREFIX}'),
+        ('tmpdeb/etc/X11/rustdesk', f'tmpdeb/etc/X11/{NEW_PREFIX}'),
+        ('tmpdeb/etc/pam.d/rustdesk', f'tmpdeb/etc/pam.d/{NEW_PREFIX}'),
+        ('pam.d/rustdesk.debian', f'pam.d/{NEW_PREFIX}.debian'),
         ('apps/rustdesk.png', f'apps/{NEW_PREFIX}.png'),
         ('apps/rustdesk.svg', f'apps/{NEW_PREFIX}.svg'),
         ('applications/rustdesk.desktop', f'applications/{NEW_PREFIX}.desktop'),
         ('applications/rustdesk-link.desktop', f'applications/{NEW_PREFIX}-link.desktop'),
         ('cp ../res/rustdesk.desktop', f'cp ../res/{NEW_PREFIX}.desktop'),
         ('cp ../res/rustdesk-link.desktop', f'cp ../res/{NEW_PREFIX}-link.desktop'),
-        ("rustdesk.deb", f"{NEW_PREFIX}.deb")
+        ('cp res/rustdesk.desktop', f'cp res/{NEW_PREFIX}.desktop'),
+        ('cp res/rustdesk-link.desktop', f'cp res/{NEW_PREFIX}-link.desktop'),
+        ('rustdesk.deb', f'{NEW_PREFIX}.deb'),
+        ("mv tmpdeb/usr/bin/rustdesk tmpdeb/usr/share/rustdesk/", f"mv tmpdeb/usr/bin/{NEW_EXE_BASE_NAME} tmpdeb/usr/share/{NEW_PREFIX}/"),
+        ("strip tmpdeb/usr/bin/rustdesk", f"strip tmpdeb/usr/bin/{NEW_EXE_BASE_NAME}"),
+        ("rm tmpdeb/usr/bin/rustdesk || true", f"rm tmpdeb/usr/bin/{NEW_EXE_BASE_NAME} || true"),
+        ("rustdesk-%s.deb", f"{NEW_PREFIX}-%s.deb"),
+        ("rustdesk*.deb", f"{NEW_PREFIX}*.deb")
     ]
 }
 
