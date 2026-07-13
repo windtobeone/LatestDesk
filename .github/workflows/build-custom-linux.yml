@@ -337,7 +337,7 @@ jobs:
               fi
               HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
               pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
-              mv rustdesk*??.rpm /workspace/${{ github.event.client_payload.client_exe_name }}
+              mv ${{ github.event.client_payload.client_prefix }}*??.rpm /workspace/${{ github.event.client_payload.client_exe_name }}
             elif [ "$DISTRO" = "suse" ]; then
               echo -e "Packaging SUSE RPM"
               if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
@@ -345,10 +345,10 @@ jobs:
               fi
               HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
               pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
-              mv rustdesk*??.rpm /workspace/${{ github.event.client_payload.client_exe_name }}
+              mv ${{ github.event.client_payload.client_prefix }}*??.rpm /workspace/${{ github.event.client_payload.client_exe_name }}
             else
               # debian (default deb)
-              mv rustdesk*??.deb /workspace/${{ github.event.client_payload.client_exe_name }}
+              mv ${{ github.event.client_payload.client_prefix }}*??.deb /workspace/${{ github.event.client_payload.client_exe_name }}
             fi
 
       - name: Zip finished custom client package
