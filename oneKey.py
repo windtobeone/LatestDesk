@@ -348,6 +348,12 @@ def apply_customization():
             print(f"Success: Renamed res/rustdesk.service to res/{NEW_PREFIX}.service")
         except Exception as e:
             print(f"Error: Failed to rename res/rustdesk.service: {e}")
+    if os.path.exists("res/pam.d/rustdesk.debian"):
+        try:
+            os.rename("res/pam.d/rustdesk.debian", f"res/pam.d/{NEW_PREFIX}.debian")
+            print(f"Success: Renamed res/pam.d/rustdesk.debian to res/pam.d/{NEW_PREFIX}.debian")
+        except Exception as e:
+            print(f"Error: Failed to rename res/pam.d/rustdesk.debian: {e}")
 
     # ==========================================
     # Part 4: custom.txt dynamic decryption and write
