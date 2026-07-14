@@ -67,6 +67,9 @@ NEW_TAB_TEXT = """child: Text(
 # Part 2: Replacement rules mapping
 # ==========================================
 REPLACEMENTS = {
+    "res/DEBIAN/preinst": [
+        ('service rustdesk stop', f'service {NEW_PREFIX} stop')
+    ],
     "Cargo.toml": [
         ('Copyright © 2025 Purslane Ltd.', f'Copyright © 2025 {NEW_DOMAIN}.'),
         ('ProductName = "RustDesk"', f'ProductName = "{NEW_EXE_BASE_NAME}"'),
@@ -87,7 +90,11 @@ REPLACEMENTS = {
         ('cp res/rustdesk.desktop', f'cp res/{NEW_PREFIX}.desktop'),
         ('cp res/rustdesk-link.desktop', f'cp res/{NEW_PREFIX}-link.desktop'),
         ('apps/rustdesk.png', f'apps/{NEW_PREFIX}.png'),
-        ('apps/rustdesk.svg', f'apps/{NEW_PREFIX}.svg')
+        ('apps/rustdesk.svg', f'apps/{NEW_PREFIX}.svg'),
+        ("'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg'", "'true'"),
+        ("'cp res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg'", "'true'"),
+        ("'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp ../src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true')\n    system2('cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'"),
+        ("'cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true')\n                system2('cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'")
     ],
     "flutter/linux/my_application.cc": [
         ('theme, "rustdesk"', f'theme, "{NEW_PREFIX}"')
