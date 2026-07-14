@@ -87,6 +87,10 @@ REPLACEMENTS = {
         ('name = "RustDesk"', f'name = "{NEW_EXE_BASE_NAME}"')
     ],
     "build.py": [
+        ("'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg'", "'true'"),
+        ("'cp res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg'", "'true'"),
+        ("'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp ../src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true')\n    system2('cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'"),
+        ("'cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true')\n                system2('cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'"),
         ('rustdesk.exe', NEW_EXE_NAME),
         ('rustdesk_portable.exe', f'{NEW_PREFIX}_portable.exe'),
         ('rustdesk-{version}-install.exe', f'{NEW_PREFIX}-{{version}}-install.exe'),
@@ -99,11 +103,7 @@ REPLACEMENTS = {
         ('cp res/rustdesk.desktop', f'cp res/{NEW_PREFIX}.desktop'),
         ('cp res/rustdesk-link.desktop', f'cp res/{NEW_PREFIX}-link.desktop'),
         ('apps/rustdesk.png', f'apps/{NEW_PREFIX}.png'),
-        ('apps/rustdesk.svg', f'apps/{NEW_PREFIX}.svg'),
-        ("'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg'", "'true'"),
-        ("'cp res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg'", "'true'"),
-        ("'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp ../src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true')\n    system2('cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'"),
-        ("'cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true')\n                system2('cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'")
+        ('apps/rustdesk.svg', f'apps/{NEW_PREFIX}.svg')
     ],
     "flutter/linux/my_application.cc": [
         ('theme, "rustdesk"', f'theme, "{NEW_PREFIX}"')
