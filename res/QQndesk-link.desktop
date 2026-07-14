@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=QQanDesk
+NoDisplay=true
+MimeType=x-scheme-handler/QQndesk;
+TryExec=QQndesk
+Exec=QQndesk %u
+Icon=QQndesk
+Terminal=false
+Type=Application
+StartupNotify=false
+StartupWMClass=QQndesk
