@@ -20,7 +20,16 @@ NEW_URL      = os.getenv("NEW_URL", NEW_API_SERVER)
 parsed_url = urlparse(NEW_API_SERVER)
 NEW_DOMAIN = os.getenv("NEW_DOMAIN", parsed_url.hostname or "192.168.201.129")
 
-NEW_EXE_BASE_NAME = NEW_EXE_NAME.replace(".exe", "")
+NEW_EXE_BASE_NAME = NEW_EXE_NAME
+for suffix in [".exe", ".deb", ".dmg", ".AppImage", ".flatpak", ".tar.gz", ".zip"]:
+    if NEW_EXE_BASE_NAME.endswith(suffix):
+        NEW_EXE_BASE_NAME = NEW_EXE_BASE_NAME[:-len(suffix)]
+        break
+# Also case-insensitive fallback just in case
+for suffix in [".EXE", ".DEB", ".DMG", ".APPIMAGE"]:
+    if NEW_EXE_BASE_NAME.endswith(suffix):
+        NEW_EXE_BASE_NAME = NEW_EXE_BASE_NAME[:-len(suffix)]
+        break
 
 # ==========================================
 # Extracted multi-line code blocks for replacement
