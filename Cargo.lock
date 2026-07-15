@@ -7290,6 +7290,7 @@ dependencies = [
  "core-foundation 0.9.4",
  "core-graphics 0.22.3",
  "cpal",
+ "crc32fast",
  "crossbeam-queue",
  "ctrlc",
  "dasp",

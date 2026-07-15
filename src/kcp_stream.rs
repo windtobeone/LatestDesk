@@ -40,7 +40,12 @@ fn calculate_mac(
     use sodiumoxide::crypto::generichash;
     let mut state = generichash::State::new(Some(32), Some(session_key.as_ref())).unwrap();
     let _ = state.update(&[channel_id, packet_type]);
-    let _ = state.update(payload);
+    if channel_id == 1 {
+        let _ = state.update(payload);
+    } else {
+        let crc = crc32fast::hash(payload);
+        let _ = state.update(&crc.to_le_bytes());
+    }
     let digest = state.finalize().unwrap();
     
     let mut mac_bytes = [0u8; 4];
