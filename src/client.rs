@@ -988,11 +988,16 @@ impl Client {
         let target_addr = ipv4_to_ipv6(check_port(relay_server, RELAY_PORT), ipv4);
         udp_socket.connect(target_addr).await?;
         
+        let actual_key = if key.is_empty() {
+            config::RS_PUB_KEY
+        } else {
+            key
+        };
         let (kcp_stream, stream) = KcpStream::connect(
             Arc::new(udp_socket),
             Duration::from_millis(CONNECT_TIMEOUT),
             Some(session_id),
-            Some(key.to_string()),
+            Some(actual_key.to_string()),
             1, // Channel 1: Control
         ).await?;
         
