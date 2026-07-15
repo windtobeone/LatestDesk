@@ -9,6 +9,7 @@ use hbb_common::{
 };
 use kcp_sys::{
     endpoint::KcpEndpoint,
+    ffi_safe::KcpConfig,
     packet_def::{KcpPacket, KcpPacketHeader},
     stream,
 };
@@ -115,6 +116,18 @@ impl KcpStream {
         channel_id: u8,
     ) -> ResultType<(Self, Stream)> {
         let mut endpoint = KcpEndpoint::new();
+        endpoint.set_kcp_config_factory(Box::new(|conv| {
+            KcpConfig {
+                conv,
+                mtu: Some(1400),
+                sndwnd: Some(128),
+                rcvwnd: Some(128),
+                nodelay: Some(1),
+                interval: Some(10),
+                resend: Some(2),
+                nc: Some(1),
+            }
+        }));
         endpoint.run().await;
 
         let (input, output) = (
@@ -217,9 +230,9 @@ impl KcpStream {
                                     &buf[..size]
                                 };
 
-                                input
-                                    .send(BytesMut::from(payload).into())
-                                    .await.ok();
+                                if let Err(e) = input.send(BytesMut::from(payload).into()).await {
+                                    log::error!("KCP input send error: {:?}", e);
+                                }
                             }
                             Err(e) => {
                                 use std::io::ErrorKind;
