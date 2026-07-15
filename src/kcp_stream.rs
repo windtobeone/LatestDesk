@@ -174,6 +174,12 @@ impl KcpStream {
                     }
                     Some(data) = output.recv() => {
                         let payload = data.inner();
+                        log::info!(
+                            "KCP client sending packet: len={}, flag={}, conv={}",
+                            payload.len(),
+                            payload.get(12).copied().unwrap_or_default(),
+                            u32::from_le_bytes(payload[0..4].try_into().unwrap_or_default())
+                        );
                         let buf_to_send = if let Some(sid) = session_id {
                             // Calculate MAC
                             let session_key = derive_session_key(&master_key.clone().unwrap_or_default(), sid);
@@ -222,7 +228,12 @@ impl KcpStream {
                                         log::warn!("KCP client MAC verification failed! expected={}, got={}", expected_mac, header_mac);
                                         continue;
                                     }
-                                    log::info!("KCP client MAC verified successfully! len={}", size);
+                                    log::info!(
+                                        "KCP client MAC verified successfully! len={}, flag={}, conv={}",
+                                        size,
+                                        kcp_payload.get(12).copied().unwrap_or_default(),
+                                        u32::from_le_bytes(kcp_payload[0..4].try_into().unwrap_or_default())
+                                    );
                                     kcp_payload
                                 } else {
                                     if size < std::mem::size_of::<KcpPacketHeader>() {
