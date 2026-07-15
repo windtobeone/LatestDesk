@@ -219,9 +219,14 @@ impl KcpStream {
                                     .await.ok();
                             }
                             Err(e) => {
-                                #[cfg(target_os = "windows")]
-                                if e.raw_os_error() == Some(10054) {
-                                    continue;
+                                use std::io::ErrorKind;
+                                match e.kind() {
+                                    ErrorKind::ConnectionRefused
+                                    | ErrorKind::ConnectionReset
+                                    | ErrorKind::ConnectionAborted => {
+                                        continue;
+                                    }
+                                    _ => {}
                                 }
                                 log::debug!("KCP recv_from error: {:?}", e);
                                 break;
