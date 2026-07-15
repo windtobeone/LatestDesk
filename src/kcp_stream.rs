@@ -219,6 +219,10 @@ impl KcpStream {
                                     .await.ok();
                             }
                             Err(e) => {
+                                #[cfg(target_os = "windows")]
+                                if e.raw_os_error() == Some(10054) {
+                                    continue;
+                                }
                                 log::debug!("KCP recv_from error: {:?}", e);
                                 break;
                             }
