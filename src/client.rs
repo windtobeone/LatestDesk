@@ -594,7 +594,7 @@ impl Client {
                         );
                         connect_futures.push(
                             async move {
-                                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                                 let conn = fut.await?;
                                 Ok((conn, None, if use_ws() { "WebSocket" } else { "Relay" }))
                             }

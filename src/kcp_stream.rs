@@ -140,6 +140,7 @@ impl KcpStream {
         Self::kcp_io(udp_socket.clone(), input, output, stop_receiver, session_id, master_key, channel_id).await;
 
         let conn_id = endpoint.connect(timeout, 0, 0, Bytes::new()).await?;
+        log::info!("KCP endpoint connected successfully, conn_id={:?}", conn_id);
         if let Some(stream) = stream::KcpStream::new(&endpoint, conn_id) {
             Ok((
                 Self {
