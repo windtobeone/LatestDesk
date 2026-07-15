@@ -14,6 +14,40 @@ use kcp_sys::{
 };
 use std::{net::SocketAddr, sync::Arc};
 
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+pub struct UdpSessionHeader {
+    pub session_id: u64,
+    pub packet_type: u8,
+    pub channel_id: u8,
+    pub mac: u32,
+}
+
+fn derive_session_key(master_key: &str, session_id: u64) -> sodiumoxide::crypto::generichash::Digest {
+    use sodiumoxide::crypto::generichash;
+    let mut state = generichash::State::new(Some(32), None).unwrap();
+    let _ = state.update(master_key.as_bytes());
+    let _ = state.update(&session_id.to_le_bytes());
+    state.finalize().unwrap()
+}
+
+fn calculate_mac(
+    session_key: &sodiumoxide::crypto::generichash::Digest,
+    channel_id: u8,
+    packet_type: u8,
+    payload: &[u8],
+) -> u32 {
+    use sodiumoxide::crypto::generichash;
+    let mut state = generichash::State::new(Some(32), Some(session_key.as_ref())).unwrap();
+    let _ = state.update(&[channel_id, packet_type]);
+    let _ = state.update(payload);
+    let digest = state.finalize().unwrap();
+    
+    let mut mac_bytes = [0u8; 4];
+    mac_bytes.copy_from_slice(&digest.as_ref()[..4]);
+    u32::from_le_bytes(mac_bytes)
+}
+
 pub struct KcpStream {
     _endpoint: KcpEndpoint,
     stop_sender: Option<oneshot::Sender<()>>,
@@ -33,6 +67,9 @@ impl KcpStream {
         udp_socket: Arc<UdpSocket>,
         timeout: std::time::Duration,
         init_packet: Option<BytesMut>,
+        session_id: Option<u64>,
+        master_key: Option<String>,
+        channel_id: u8,
     ) -> ResultType<(Self, Stream)> {
         let mut endpoint = KcpEndpoint::new();
         endpoint.run().await;
@@ -49,7 +86,7 @@ impl KcpStream {
                 input.send(packet.into()).await?;
             }
         }
-        Self::kcp_io(udp_socket.clone(), input, output, stop_receiver).await;
+        Self::kcp_io(udp_socket.clone(), input, output, stop_receiver, session_id, master_key, channel_id).await;
 
         let conn_id = tokio::time::timeout(timeout, endpoint.accept()).await??;
         if let Some(stream) = stream::KcpStream::new(&endpoint, conn_id) {
@@ -68,6 +105,9 @@ impl KcpStream {
     pub async fn connect(
         udp_socket: Arc<UdpSocket>,
         timeout: std::time::Duration,
+        session_id: Option<u64>,
+        master_key: Option<String>,
+        channel_id: u8,
     ) -> ResultType<(Self, Stream)> {
         let mut endpoint = KcpEndpoint::new();
         endpoint.run().await;
@@ -79,7 +119,7 @@ impl KcpStream {
                 .ok_or_else(|| anyhow::anyhow!("Failed to get output receiver"))?,
         );
         let (stop_sender, stop_receiver) = oneshot::channel();
-        Self::kcp_io(udp_socket.clone(), input, output, stop_receiver).await;
+        Self::kcp_io(udp_socket.clone(), input, output, stop_receiver, session_id, master_key, channel_id).await;
 
         let conn_id = endpoint.connect(timeout, 0, 0, Bytes::new()).await?;
         if let Some(stream) = stream::KcpStream::new(&endpoint, conn_id) {
@@ -100,10 +140,13 @@ impl KcpStream {
         input: mpsc::Sender<KcpPacket>,
         mut output: mpsc::Receiver<KcpPacket>,
         mut stop_receiver: oneshot::Receiver<()>,
+        session_id: Option<u64>,
+        master_key: Option<String>,
+        channel_id: u8,
     ) {
         let udp = udp_socket.clone();
         tokio::spawn(async move {
-            let mut buf = vec![0; 1500];
+            let mut buf = vec![0; 65536];
             loop {
                 tokio::select! {
                     _ = &mut stop_receiver => {
@@ -111,7 +154,29 @@ impl KcpStream {
                         break;
                     }
                     Some(data) = output.recv() => {
-                        if let Err(e) = udp.send(&data.inner()).await {
+                        let payload = data.inner();
+                        let buf_to_send = if let Some(sid) = session_id {
+                            // Calculate MAC
+                            let session_key = derive_session_key(&master_key.clone().unwrap_or_default(), sid);
+                            let mac = calculate_mac(&session_key, channel_id, 2, &payload); // packet_type = 2 (Data)
+                            
+                            let mut resp = vec![0u8; 14 + payload.len()];
+                            let header = UdpSessionHeader {
+                                session_id: sid.to_le(),
+                                packet_type: 2,
+                                channel_id,
+                                mac,
+                            };
+                            unsafe {
+                                std::ptr::write_unaligned(resp.as_mut_ptr() as *mut UdpSessionHeader, header);
+                            }
+                            resp[14..].copy_from_slice(&payload);
+                            resp
+                        } else {
+                            payload.to_vec()
+                        };
+
+                        if let Err(e) = udp.send(&buf_to_send).await {
                             log::debug!("KCP send error: {:?}", e);
                             break;
                         }
@@ -119,11 +184,33 @@ impl KcpStream {
                     result = udp.recv_from(&mut buf) => {
                         match result {
                             Ok((size, _)) => {
-                                if size < std::mem::size_of::<KcpPacketHeader>() {
-                                    continue;
-                                }
+                                let payload = if let Some(sid) = session_id {
+                                    if size < 14 {
+                                        continue;
+                                    }
+                                    let header = unsafe { std::ptr::read_unaligned(buf.as_ptr() as *const UdpSessionHeader) };
+                                    let recv_sid = u64::from_le(header.session_id);
+                                    if recv_sid != sid {
+                                        continue;
+                                    }
+                                    
+                                    // Verify MAC
+                                    let session_key = derive_session_key(&master_key.clone().unwrap_or_default(), sid);
+                                    let kcp_payload = &buf[14..size];
+                                    let expected_mac = calculate_mac(&session_key, header.channel_id, header.packet_type, kcp_payload);
+                                    if header.mac != expected_mac {
+                                        continue;
+                                    }
+                                    kcp_payload
+                                } else {
+                                    if size < std::mem::size_of::<KcpPacketHeader>() {
+                                        continue;
+                                    }
+                                    &buf[..size]
+                                };
+
                                 input
-                                    .send(BytesMut::from(&buf[..size]).into())
+                                    .send(BytesMut::from(payload).into())
                                     .await.ok();
                             }
                             Err(e) => {

@@ -27,6 +27,10 @@ use std::{
 };
 use uuid::Uuid;
 
+lazy_static::lazy_static! {
+    static ref UDP_COOLDOWN_MAP: std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>> = Default::default();
+}
+
 use crate::{
     check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
@@ -549,10 +553,41 @@ impl Client {
                             }
                         }
                         signed_id_pk = rr.pk().into();
+                        let mut try_udp = true;
+                        if let Ok(map) = UDP_COOLDOWN_MAP.lock() {
+                            if let Some(expiry) = map.get(&rr.relay_server) {
+                                if *expiry > std::time::Instant::now() {
+                                    log::info!("UDP connection to {} is in cooldown, skipping UDP connection", rr.relay_server);
+                                    try_udp = false;
+                                }
+                            }
+                        }
+
+                        if try_udp {
+                            let peer_c = peer.clone();
+                            let uuid_c = rr.uuid.clone();
+                            let rs_c = rr.relay_server.clone();
+                            let key_c = key.clone();
+                            connect_futures.push(
+                                async move {
+                                    let res = Self::create_relay_kcp(
+                                        &peer_c,
+                                        uuid_c,
+                                        rs_c,
+                                        &key_c,
+                                        conn_type,
+                                        my_addr.is_ipv4(),
+                                    ).await?;
+                                    Ok((res.0, res.1, "KCP"))
+                                }
+                                .boxed(),
+                            );
+                        }
+
                         let fut = Self::create_relay(
                             &peer,
-                            rr.uuid,
-                            rr.relay_server,
+                            rr.uuid.clone(),
+                            rr.relay_server.clone(),
                             &key,
                             conn_type,
                             my_addr.is_ipv4(),
@@ -566,8 +601,15 @@ impl Client {
                         );
                         // Run all connection attempts concurrently, return the first successful one
                         let (conn, kcp, typ) = match select_ok(connect_futures).await {
-                            Ok(conn) => (Ok(conn.0 .0), conn.0 .1, conn.0 .2),
-
+                            Ok(conn) => {
+                                let (c, k, t) = (conn.0 .0, conn.0 .1, conn.0 .2);
+                                if t == "Relay" && try_udp {
+                                    if let Ok(mut map) = UDP_COOLDOWN_MAP.lock() {
+                                        map.insert(rr.relay_server.clone(), std::time::Instant::now() + std::time::Duration::from_secs(300));
+                                    }
+                                }
+                                (Ok(c), k, t)
+                            }
                             Err(e) => (Err(e), None, ""),
                         };
                         let mut conn = conn?;
@@ -922,6 +964,49 @@ impl Client {
         });
         conn.send(&msg_out).await?;
         Ok(conn)
+    }
+
+    async fn create_relay_kcp(
+        peer: &str,
+        uuid: String,
+        relay_server: String,
+        key: &str,
+        conn_type: ConnType,
+        ipv4: bool,
+    ) -> ResultType<(Stream, Option<KcpStream>, &'static str)> {
+        let session_id = {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            uuid.hash(&mut hasher);
+            hasher.finish()
+        };
+
+        let local_addr = if ipv4 { "0.0.0.0:0" } else { "[::]:0" };
+        let udp_socket = UdpSocket::bind(local_addr).await?;
+        let target_addr = ipv4_to_ipv6(check_port(relay_server, RELAY_PORT), ipv4);
+        udp_socket.connect(target_addr).await?;
+        
+        let (kcp_stream, stream) = KcpStream::connect(
+            Arc::new(udp_socket),
+            Duration::from_millis(CONNECT_TIMEOUT),
+            Some(session_id),
+            Some(key.to_string()),
+            1, // Channel 1: Control
+        ).await?;
+        
+        let mut msg_out = RendezvousMessage::new();
+        msg_out.set_request_relay(RequestRelay {
+            licence_key: key.to_owned(),
+            id: peer.to_owned(),
+            uuid,
+            conn_type: conn_type.into(),
+            ..Default::default()
+        });
+        
+        let mut wrapped_stream = stream;
+        wrapped_stream.send(&msg_out).await?;
+        Ok((wrapped_stream, Some(kcp_stream), "KCP"))
     }
 
     #[inline]
@@ -4254,7 +4339,7 @@ async fn udp_nat_connect(
             log::debug!("{err}");
             anyhow!(err)
         })?;
-    let res = KcpStream::connect(socket, Duration::from_millis(ms_timeout))
+    let res = KcpStream::connect(socket, Duration::from_millis(ms_timeout), None, None, 0)
         .await
         .map_err(|err| {
             log::debug!("Failed to connect KCP stream: {}", err);

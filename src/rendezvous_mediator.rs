@@ -971,6 +971,9 @@ async fn udp_nat_listen(
             socket,
             Duration::from_millis(CONNECT_TIMEOUT as _),
             res,
+            None,
+            None,
+            0,
         )
         .await?;
         crate::server::create_tcp_connection(
