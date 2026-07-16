@@ -13,7 +13,9 @@ use kcp_sys::{
     packet_def::{KcpPacket, KcpPacketHeader},
     stream,
 };
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::{Duration, Instant}};
+
+pub static BASE_RTT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(200);
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -52,6 +54,79 @@ fn calculate_mac(
     let mut mac_bytes = [0u8; 4];
     mac_bytes.copy_from_slice(&digest.as_ref()[..4]);
     u32::from_le_bytes(mac_bytes)
+}
+
+pub struct PmtuDetector {
+    socket: Arc<UdpSocket>,
+    session_id: u64,
+    master_key: String,
+    base_rtt: Duration,
+}
+
+impl PmtuDetector {
+    pub fn new(socket: Arc<UdpSocket>, session_id: u64, master_key: String, base_rtt: Duration) -> Self {
+        Self { socket, session_id, master_key, base_rtt }
+    }
+
+    pub async fn detect_pmtu(&self, target_addr: std::net::SocketAddr) -> usize {
+        let probe_sizes = [1280, 1300, 1350, 1400];
+        let mut max_stable_mtu = 1280; // Safety fallback
+        let session_key = derive_session_key(&self.master_key, self.session_id);
+
+        // 1. Send concurrent probes (2 rounds to mitigate WAN packet loss)
+        for _ in 0..2 {
+            for &size in &probe_sizes {
+                let mut payload = vec![0u8; size];
+                let mac = calculate_mac(&session_key, 0, 9, &payload[14..]);
+                let header = UdpSessionHeader {
+                    session_id: self.session_id.to_le(),
+                    packet_type: 9, // PMTU Probe
+                    channel_id: 0,
+                    mac,
+                };
+                unsafe {
+                    std::ptr::write_unaligned(payload.as_mut_ptr() as *mut UdpSessionHeader, header);
+                }
+                let _ = self.socket.send_to(&payload, target_addr).await;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // 2. Await Echo responses with adaptive timeout (max(300ms, base_rtt * 3))
+        let mut buf = [0u8; 1500];
+        let start = Instant::now();
+        let timeout_dur = std::cmp::max(Duration::from_millis(300), self.base_rtt * 3);
+
+        while start.elapsed() < timeout_dur {
+            if let Ok(Ok((len, _))) = tokio::time::timeout(
+                Duration::from_millis(10),
+                self.socket.recv_from(&mut buf),
+            ).await {
+                if len >= 14 {
+                    // Safe offset-based reading to prevent UB on ARM/MIPS
+                    let recv_session_id = unsafe { std::ptr::read_unaligned(buf.as_ptr() as *const u64) };
+                    let recv_packet_type = buf[8];
+                    let recv_channel_id = buf[9];
+                    let recv_mac = unsafe { std::ptr::read_unaligned(buf.as_ptr().add(10) as *const u32) };
+
+                    if u64::from_le(recv_session_id) == self.session_id && recv_packet_type == 9 {
+                        // Verify MAC
+                        let expected_mac = calculate_mac(&session_key, recv_channel_id, recv_packet_type, &buf[14..len]);
+                        if recv_mac == expected_mac && len > max_stable_mtu {
+                            max_stable_mtu = len;
+                            if max_stable_mtu == 1400 {
+                                // Reached optimal MTU, can early exit
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        log::info!("[PMTUD] Dynamic PMTU negotiation completed. Selected MTU: {} bytes", max_stable_mtu);
+        max_stable_mtu
+    }
 }
 
 pub struct KcpStream {
@@ -116,10 +191,27 @@ impl KcpStream {
         channel_id: u8,
     ) -> ResultType<(Self, Stream)> {
         let mut endpoint = KcpEndpoint::new();
-        endpoint.set_kcp_config_factory(Box::new(|conv| {
+
+        let mut negotiated_mtu = 1400;
+        if let Some(sid) = session_id {
+            if let Ok(target_addr) = udp_socket.peer_addr() {
+                let base_rtt = Duration::from_millis(
+                    BASE_RTT_MS.load(std::sync::atomic::Ordering::Relaxed)
+                );
+                let detector = PmtuDetector::new(
+                    udp_socket.clone(),
+                    sid,
+                    master_key.clone().unwrap_or_default(),
+                    base_rtt,
+                );
+                negotiated_mtu = detector.detect_pmtu(target_addr).await;
+            }
+        }
+
+        endpoint.set_kcp_config_factory(Box::new(move |conv| {
             KcpConfig {
                 conv,
-                mtu: Some(1400),
+                mtu: Some(negotiated_mtu as i32),
                 sndwnd: Some(128),
                 rcvwnd: Some(128),
                 nodelay: Some(1),

@@ -397,6 +397,7 @@ impl Client {
         debug_assert!(!servers.contains(&rendezvous_server));
         let rtt = start.elapsed();
         log::debug!("TCP connection establishment time used: {:?}", rtt);
+        crate::kcp_stream::BASE_RTT_MS.store(rtt.as_millis() as u64, std::sync::atomic::Ordering::Relaxed);
         if socket.is_err() && !servers.is_empty() {
             log::info!("try the other servers: {:?}", servers);
             for server in servers {
