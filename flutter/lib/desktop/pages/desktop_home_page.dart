@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
@@ -60,19 +61,62 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   final GlobalKey _childKey = GlobalKey();
 
+  DecorationImage? _getDiyBackgroundImage() {
+    try {
+      final customPath = bind.getLocalFlutterOption(k: 'diy-background-image');
+      if (customPath.isNotEmpty && File(customPath).existsSync()) {
+        return DecorationImage(
+          image: FileImage(File(customPath)),
+          fit: BoxFit.cover,
+        );
+      }
+      if (File('./bg.png').existsSync()) {
+        return DecorationImage(
+          image: FileImage(File('./bg.png')),
+          fit: BoxFit.cover,
+        );
+      }
+      if (File('./bg.jpg').existsSync()) {
+        return DecorationImage(
+          image: FileImage(File('./bg.jpg')),
+          fit: BoxFit.cover,
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Widget _buildGlassPane({required Widget child, required bool isDark, required double opacity}) {
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+        child: Container(
+          color: (isDark ? const Color(0xFF1E2838) : const Color(0xFFF5F7FA)).withOpacity(opacity),
+          child: child,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
-    return _buildBlock(
-        child: Row(
+    final bgImage = _getDiyBackgroundImage();
+    
+    final rowChild = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         buildLeftPane(context),
         if (!isIncomingOnly) const VerticalDivider(width: 1),
         if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
       ],
-    ));
+    );
+
+    return Container(
+      decoration: bgImage != null ? BoxDecoration(image: bgImage) : null,
+      child: _buildBlock(child: rowChild),
+    );
   }
 
   Widget _buildBlock({required Widget child}) {
@@ -155,63 +199,82 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       ]);
     }
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    final bgImage = _getDiyBackgroundImage();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final stackChild = Stack(
+      children: [
+        Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _leftPaneScrollController,
+                child: Column(
+                  key: _childKey,
+                  children: children,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (isOutgoingOnly)
+          Positioned(
+            bottom: 6,
+            left: 12,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InkWell(
+                child: Obx(
+                  () => Icon(
+                    Icons.settings,
+                    color: _editHover.value
+                        ? textColor
+                        : Colors.grey.withOpacity(0.5),
+                    size: 22,
+                  ),
+                ),
+                onTap: () => {
+                  if (DesktopSettingPage.tabKeys.isNotEmpty)
+                    {
+                      DesktopSettingPage.switch2page(
+                          DesktopSettingPage.tabKeys[0])
+                    }
+                },
+                onHover: (value) => _editHover.value = value,
+              ),
+            ),
+          )
+      ],
+    );
+
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
         width: 280.0, // 刚性拓宽以兼容控制输入与按钮
-        color: Theme.of(context).colorScheme.background,
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    controller: _leftPaneScrollController,
-                    child: Column(
-                      key: _childKey,
-                      children: children,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (isOutgoingOnly)
-              Positioned(
-                bottom: 6,
-                left: 12,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: InkWell(
-                    child: Obx(
-                      () => Icon(
-                        Icons.settings,
-                        color: _editHover.value
-                            ? textColor
-                            : Colors.grey.withOpacity(0.5),
-                        size: 22,
-                      ),
-                    ),
-                    onTap: () => {
-                      if (DesktopSettingPage.tabKeys.isNotEmpty)
-                        {
-                          DesktopSettingPage.switch2page(
-                              DesktopSettingPage.tabKeys[0])
-                        }
-                    },
-                    onHover: (value) => _editHover.value = value,
-                  ),
-                ),
+        color: bgImage != null ? Colors.transparent : Theme.of(context).colorScheme.background,
+        child: bgImage != null
+            ? _buildGlassPane(
+                child: stackChild,
+                isDark: isDark,
+                opacity: 0.85,
               )
-          ],
-        ),
+            : stackChild,
       ),
     );
   }
 
   buildRightPane(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgImage = _getDiyBackgroundImage();
     return Container(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: ConnectionPage(),
+      color: bgImage != null ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor,
+      child: bgImage != null
+          ? _buildGlassPane(
+              child: ConnectionPage(),
+              isDark: isDark,
+              opacity: 0.7,
+            )
+          : ConnectionPage(),
     );
   }
 
