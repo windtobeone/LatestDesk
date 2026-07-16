@@ -592,14 +592,21 @@ impl Client {
                             conn_type,
                             my_addr.is_ipv4(),
                         );
-                        connect_futures.push(
-                            async move {
-                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                                let conn = fut.await?;
-                                Ok((conn, None, if use_ws() { "WebSocket" } else { "Relay" }))
-                            }
-                            .boxed(),
-                        );
+                        let delay_ms = if rtt < std::time::Duration::from_millis(20) {
+                             log::info!("Adaptive Eyeballs Delay: Low RTT ({:?}) detected (LAN/Intranet), setting concurrent TCP racing delay to 40ms", rtt);
+                             40
+                         } else {
+                             log::info!("Adaptive Eyeballs Delay: Standard RTT ({:?}) detected, setting concurrent TCP racing delay to 500ms", rtt);
+                             500
+                         };
+                         connect_futures.push(
+                             async move {
+                                 tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                                 let conn = fut.await?;
+                                 Ok((conn, None, if use_ws() { "WebSocket" } else { "Relay" }))
+                             }
+                             .boxed(),
+                         );
                         // Run all connection attempts concurrently, return the first successful one
                         let (conn, kcp, typ) = match select_ok(connect_futures).await {
                             Ok(conn) => {
