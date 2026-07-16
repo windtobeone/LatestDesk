@@ -318,7 +318,7 @@ impl Client {
         let udp =
         // no need to care about multiple rendezvous servers case, since it is acutally not used any more.
         // Shared state for UDP NAT test result
-        if crate::get_udp_punch_enabled() && !interface.is_force_relay() {
+        if crate::get_udp_punch_enabled() && !interface.is_force_relay() && !crate::is_udp_disabled() {
             if let Ok((socket, addr)) = new_direct_udp_for(&rendezvous_server).await {
                 let udp_port = Arc::new(Mutex::new(0));
                 let up_cloned = udp_port.clone();
@@ -554,7 +554,7 @@ impl Client {
                             }
                         }
                         signed_id_pk = rr.pk().into();
-                        let mut try_udp = true;
+                        let mut try_udp = !crate::is_udp_disabled();
                         if let Ok(map) = UDP_COOLDOWN_MAP.lock() {
                             if let Some(expiry) = map.get(&rr.relay_server) {
                                 if *expiry > std::time::Instant::now() {
