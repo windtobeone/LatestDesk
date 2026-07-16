@@ -218,7 +218,13 @@ impl KcpStream {
                                     let kcp_payload = &buf[14..size];
                                     let expected_mac = calculate_mac(&session_key, header.channel_id, header.packet_type, kcp_payload);
                                     let header_mac = header.mac;
-                                    if header_mac != expected_mac {
+                                    let expected_bytes = expected_mac.to_le_bytes();
+                                    let header_bytes = header_mac.to_le_bytes();
+                                    let mut d = 0;
+                                    for i in 0..4 {
+                                        d |= std::hint::black_box(expected_bytes[i]) ^ std::hint::black_box(header_bytes[i]);
+                                    }
+                                    if std::hint::black_box(d) != 0 {
                                         log::warn!("KCP client MAC verification failed! expected={}, got={}", expected_mac, header_mac);
                                         continue;
                                     }
