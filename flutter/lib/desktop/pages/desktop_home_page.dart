@@ -136,35 +136,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       children.addAll([
         const Divider(),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Container(
-                    height: 8,
-                    width: 8,
-                    decoration: BoxDecoration(
-                      color: const Color.fromARGB(255, 50, 190, 166),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    translate("Ready"),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6),
-                    ),
-                  ),
-                ],
+              const Expanded(
+                child: OnlineStatusWidget(),
               ),
               Icon(
                 Icons.lock_outline,
                 size: 16,
                 color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.4),
-              ),
+              ).paddingOnly(right: 16),
             ],
           ),
         ),

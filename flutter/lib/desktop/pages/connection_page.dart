@@ -303,7 +303,6 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   @override
   Widget build(BuildContext context) {
-    final isOutgoingOnly = bind.isOutgoingOnly();
     return Column(
       children: [
         // 🟢 顶部绿色艺术 Banner
@@ -318,8 +317,6 @@ class _ConnectionPageState extends State<ConnectionPage>
         const SizedBox(height: 12),
         // 🛡️ 底部安全防护卡片
         _buildDiyBottomSecurityCard(context),
-        if (!isOutgoingOnly) const Divider(height: 1),
-        if (!isOutgoingOnly) OnlineStatusWidget()
       ],
     );
   }
