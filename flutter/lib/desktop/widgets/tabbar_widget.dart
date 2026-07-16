@@ -515,21 +515,35 @@ class _DesktopTabState extends State<DesktopTab>
         if (stateGlobal.showTabBar.isTrue &&
             !(kUseCompatibleUiMode && isHideSingleItem())) {
           final showBottomDivider = _showTabBarBottomDivider(tabType);
+          final bgImage = getDiyBackgroundImage();
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+
+          Widget barWidget = Column(
+            children: [
+              SizedBox(
+                height:
+                    showBottomDivider ? _kTabBarHeight - 1 : _kTabBarHeight,
+                child: _buildBar(),
+              ),
+              if (showBottomDivider)
+                const Divider(
+                  height: 1,
+                ),
+            ],
+          );
+
+          if (bgImage != null) {
+            barWidget = Container(
+              color: isDark
+                  ? Colors.black.withOpacity(0.35)
+                  : Colors.white.withOpacity(0.45),
+              child: barWidget,
+            );
+          }
+
           return SizedBox(
             height: _kTabBarHeight,
-            child: Column(
-              children: [
-                SizedBox(
-                  height:
-                      showBottomDivider ? _kTabBarHeight - 1 : _kTabBarHeight,
-                  child: _buildBar(),
-                ),
-                if (showBottomDivider)
-                  const Divider(
-                    height: 1,
-                  ),
-              ],
-            ),
+            child: barWidget,
           );
         } else {
           return Offstage();
