@@ -145,26 +145,21 @@ class _PeerCardState extends State<_PeerCard>
       children: [
         Container(
             decoration: BoxDecoration(
-              color: str2color('${peer.id}${peer.platform}', 0x7f),
-              borderRadius: isPortrait
-                  ? BorderRadius.circular(_tileRadius)
-                  : BorderRadius.only(
-                      topLeft: Radius.circular(_tileRadius),
-                      bottomLeft: Radius.circular(_tileRadius),
-                    ),
+              color: str2color('${peer.id}${peer.platform}', 0xFF),
+              borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
             width: isPortrait ? 50 : 42,
-            height: isPortrait ? 50 : null,
+            height: isPortrait ? 50 : 42,
             child: Stack(
               children: [
-                getPlatformImage(peer.platform, size: isPortrait ? 38 : 30)
+                getPlatformImage(peer.platform, size: isPortrait ? 32 : 24, color: Colors.white)
                     .paddingAll(6),
                 if (_shouldBuildPasswordIcon(peer))
                   Positioned(
                     top: 1,
                     left: 1,
-                    child: Icon(Icons.key, size: 6, color: Colors.white),
+                    child: const Icon(Icons.key, size: 6, color: Colors.white),
                   ),
               ],
             )),

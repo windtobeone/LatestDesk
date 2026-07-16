@@ -1666,7 +1666,7 @@ Future<bool> matchPeer(
 }
 
 /// Get the image for the current [platform].
-Widget getPlatformImage(String platform, {double size = 50}) {
+Widget getPlatformImage(String platform, {double size = 50, Color? color}) {
   if (platform.isEmpty) {
     return Container(width: size, height: size);
   }
@@ -1678,7 +1678,12 @@ Widget getPlatformImage(String platform, {double size = 50}) {
   } else {
     platform = platform.toLowerCase();
   }
-  return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
+  return SvgPicture.asset(
+    'assets/$platform.svg',
+    height: size,
+    width: size,
+    colorFilter: color != null ? ColorFilter.mode(color, BlendMode.srcIn) : null,
+  );
 }
 
 class LastWindowPosition {
