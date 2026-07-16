@@ -397,7 +397,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           Icons.refresh,
                           color: refreshHover.value
                               ? textColor
-                              : const Color(0xFFDDDDDD),
+                              : textColor?.withOpacity(0.5),
                           size: 20,
                         ))),
                   ),
@@ -412,7 +412,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         Icons.edit,
                         color: editHover.value
                             ? textColor
-                            : const Color(0xFFDDDDDD),
+                            : textColor?.withOpacity(0.5),
                         size: 20,
                       ),
                     ),
