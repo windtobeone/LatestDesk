@@ -64,25 +64,35 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   DecorationImage? _getDiyBackgroundImage() {
     try {
       final customPath = bind.getLocalFlutterOption(k: 'diy-background-image');
-      if (customPath.isNotEmpty && File(customPath).existsSync()) {
-        return DecorationImage(
-          image: FileImage(File(customPath)),
-          fit: BoxFit.cover,
-        );
+      if (customPath.isNotEmpty) {
+        final f = File(customPath);
+        if (f.existsSync()) {
+          return DecorationImage(image: FileImage(f), fit: BoxFit.cover);
+        }
+        debugPrint("DIY Background: Custom path not found: ${f.absolute.path}");
       }
-      if (File('./bg.png').existsSync()) {
-        return DecorationImage(
-          image: FileImage(File('./bg.png')),
-          fit: BoxFit.cover,
-        );
+
+      final exeDir = Directory(Platform.resolvedExecutable).parent.path;
+      final paths = [
+        './bg.png',
+        './bg.jpg',
+        '../bg.png',
+        '../bg.jpg',
+        '$exeDir/bg.png',
+        '$exeDir/bg.jpg',
+      ];
+
+      for (final p in paths) {
+        final f = File(p);
+        if (f.existsSync()) {
+          debugPrint("DIY Background: Loaded background image from ${f.absolute.path}");
+          return DecorationImage(image: FileImage(f), fit: BoxFit.cover);
+        }
       }
-      if (File('./bg.jpg').existsSync()) {
-        return DecorationImage(
-          image: FileImage(File('./bg.jpg')),
-          fit: BoxFit.cover,
-        );
-      }
-    } catch (_) {}
+      debugPrint("DIY Background: Image not found. Checked paths: ${paths.map((p) => File(p).absolute.path).toList()}");
+    } catch (e) {
+      debugPrint("DIY Background lookup error: $e");
+    }
     return null;
   }
 
