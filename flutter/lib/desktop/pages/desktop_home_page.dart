@@ -238,7 +238,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       margin: const EdgeInsets.only(left: 20, right: 16, top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF202A3C) : const Color(0xFFE8F1FF),
+        color: isDark ? const Color(0xFF28364C) : const Color(0xFFD4E4FC),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -277,6 +277,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       isDense: true,
+                      filled: false,
+                      fillColor: Colors.transparent,
                     ),
                     style: const TextStyle(
                       fontSize: 20,
@@ -312,8 +314,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           () => CircleAvatar(
             radius: 15,
             backgroundColor: hover.value
-                ? Theme.of(context).scaffoldBackgroundColor
-                : Theme.of(context).colorScheme.background,
+                ? Theme.of(context).scaffoldBackgroundColor.withOpacity(0.5)
+                : Colors.transparent,
             child: Icon(
               Icons.more_vert_outlined,
               size: 20,
@@ -347,7 +349,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       margin: const EdgeInsets.only(left: 20, right: 16, top: 10, bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF202A3C) : const Color(0xFFE8F1FF),
+        color: isDark ? const Color(0xFF28364C) : const Color(0xFFD4E4FC),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -377,6 +379,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       isDense: true,
+                      filled: false,
+                      fillColor: Colors.transparent,
                     ),
                     style: const TextStyle(fontSize: 15),
                   ).workaroundFreezeLinuxMint(),
