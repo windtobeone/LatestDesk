@@ -2475,17 +2475,26 @@ class _AboutState extends State<_About> {
 
 //#region components
 
-// ignore: non_constant_identifier_names
 Widget _Card(
     {required String title,
     required List<Widget> children,
     List<Widget>? title_suffix}) {
+  final context = Get.context!;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final bgImage = getDiyBackgroundImage();
+  final cardColor = isDark ? const Color(0xFF1E2F21) : const Color(0xFFE6F4EA);
+
   return Row(
     children: [
       Flexible(
         child: SizedBox(
           width: _kCardFixedWidth,
           child: Card(
+            color: bgImage != null ? cardColor.withOpacity(0.85) : cardColor,
+            elevation: bgImage != null ? 0 : 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Column(
               children: [
                 Row(
