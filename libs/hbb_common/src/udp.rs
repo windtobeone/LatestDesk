@@ -30,13 +30,21 @@ fn new_socket(addr: SocketAddr, reuse: bool, buf_size: usize) -> Result<Socket, 
     }
     // only nonblocking work with tokio, https://stackoverflow.com/questions/64649405/receiver-on-tokiompscchannel-only-receives-messages-when-buffer-is-full
     socket.set_nonblocking(true)?;
-    if buf_size > 0 {
-        socket.set_recv_buffer_size(buf_size).ok();
+    
+    // 🛡️ 刚性加固：彻底消灭主机内部的隐形丢包，将发送和接收内核缓冲区扩大至 2MB，容纳 KCP 快速重传 Burst 发送
+    let target_buffer_size = if buf_size > 0 { buf_size } else { 2 * 1024 * 1024 };
+    if let Err(e) = socket.set_recv_buffer_size(target_buffer_size) {
+        log::warn!("[Socket] Failed to set SO_RCVBUF to target size: {:?}", e);
     }
+    if let Err(e) = socket.set_send_buffer_size(target_buffer_size) {
+        log::warn!("[Socket] Failed to set SO_SNDBUF to target size: {:?}", e);
+    }
+
     log::debug!(
-        "Receive buf size of udp {}: {:?}",
+        "Bound UDP socket to '{}'. Kernel Buffers optimized: RCV={:?}, SND={:?}",
         addr,
-        socket.recv_buffer_size()
+        socket.recv_buffer_size(),
+        socket.send_buffer_size()
     );
     if addr.is_ipv6() && addr.ip().is_unspecified() && addr.port() > 0 {
         socket.set_only_v6(false).ok();

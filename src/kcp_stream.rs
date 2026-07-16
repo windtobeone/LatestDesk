@@ -212,8 +212,8 @@ impl KcpStream {
             KcpConfig {
                 conv,
                 mtu: Some(negotiated_mtu as i32),
-                sndwnd: Some(128),
-                rcvwnd: Some(128),
+                sndwnd: Some(1024), // 刚性拓宽发送窗口，防止吞吐量天花板
+                rcvwnd: Some(1024), // 刚性接收窗口，支持高频 4K@60FPS 传输
                 nodelay: Some(1),
                 interval: Some(10),
                 resend: Some(2),
