@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -4196,6 +4198,53 @@ Widget? buildAvatarWidget({
       height: size,
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => fallback ?? SizedBox.shrink(),
+    ),
+  );
+}
+
+DecorationImage? getDiyBackgroundImage() {
+  try {
+    final customPath = bind.getLocalFlutterOption(k: 'diy-background-image');
+    if (customPath.isNotEmpty) {
+      final f = File(customPath);
+      if (f.existsSync()) {
+        return DecorationImage(image: FileImage(f), fit: BoxFit.cover);
+      }
+      debugPrint("DIY Background: Custom path not found: ${f.absolute.path}");
+    }
+
+    final exeDir = Directory(Platform.resolvedExecutable).parent.path;
+    final paths = [
+      './bg.png',
+      './bg.jpg',
+      '../bg.png',
+      '../bg.jpg',
+      '$exeDir/bg.png',
+      '$exeDir/bg.jpg',
+    ];
+
+    for (final p in paths) {
+      final f = File(p);
+      if (f.existsSync()) {
+        debugPrint("DIY Background: Loaded background image from ${f.absolute.path}");
+        return DecorationImage(image: FileImage(f), fit: BoxFit.cover);
+      }
+    }
+    debugPrint("DIY Background: Image not found. Checked paths: ${paths.map((p) => File(p).absolute.path).toList()}");
+  } catch (e) {
+    debugPrint("DIY Background lookup error: $e");
+  }
+  return null;
+}
+
+Widget buildGlassPane({required Widget child, required bool isDark, required double opacity}) {
+  return ClipRRect(
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+      child: Container(
+        color: (isDark ? const Color(0xFF1E2838) : const Color(0xFFF5F7FA)).withOpacity(opacity),
+        child: child,
+      ),
     ),
   );
 }

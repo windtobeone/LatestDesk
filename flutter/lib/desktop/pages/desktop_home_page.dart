@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
-import 'dart:ui' as ui;
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
@@ -61,58 +60,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   final GlobalKey _childKey = GlobalKey();
 
-  DecorationImage? _getDiyBackgroundImage() {
-    try {
-      final customPath = bind.getLocalFlutterOption(k: 'diy-background-image');
-      if (customPath.isNotEmpty) {
-        final f = File(customPath);
-        if (f.existsSync()) {
-          return DecorationImage(image: FileImage(f), fit: BoxFit.cover);
-        }
-        debugPrint("DIY Background: Custom path not found: ${f.absolute.path}");
-      }
-
-      final exeDir = Directory(Platform.resolvedExecutable).parent.path;
-      final paths = [
-        './bg.png',
-        './bg.jpg',
-        '../bg.png',
-        '../bg.jpg',
-        '$exeDir/bg.png',
-        '$exeDir/bg.jpg',
-      ];
-
-      for (final p in paths) {
-        final f = File(p);
-        if (f.existsSync()) {
-          debugPrint("DIY Background: Loaded background image from ${f.absolute.path}");
-          return DecorationImage(image: FileImage(f), fit: BoxFit.cover);
-        }
-      }
-      debugPrint("DIY Background: Image not found. Checked paths: ${paths.map((p) => File(p).absolute.path).toList()}");
-    } catch (e) {
-      debugPrint("DIY Background lookup error: $e");
-    }
-    return null;
-  }
-
-  Widget _buildGlassPane({required Widget child, required bool isDark, required double opacity}) {
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-        child: Container(
-          color: (isDark ? const Color(0xFF1E2838) : const Color(0xFFF5F7FA)).withOpacity(opacity),
-          child: child,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
-    final bgImage = _getDiyBackgroundImage();
+    final bgImage = getDiyBackgroundImage();
     
     final rowChild = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +161,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       ]);
     }
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    final bgImage = _getDiyBackgroundImage();
+    final bgImage = getDiyBackgroundImage();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final stackChild = Stack(
@@ -263,7 +215,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         width: 280.0, // 刚性拓宽以兼容控制输入与按钮
         color: bgImage != null ? Colors.transparent : Theme.of(context).colorScheme.background,
         child: bgImage != null
-            ? _buildGlassPane(
+            ? buildGlassPane(
                 child: stackChild,
                 isDark: isDark,
                 opacity: 0.85,
@@ -275,11 +227,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildRightPane(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgImage = _getDiyBackgroundImage();
+    final bgImage = getDiyBackgroundImage();
     return Container(
       color: bgImage != null ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor,
       child: bgImage != null
-          ? _buildGlassPane(
+          ? buildGlassPane(
               child: ConnectionPage(),
               isDark: isDark,
               opacity: 0.7,

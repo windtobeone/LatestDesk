@@ -91,9 +91,11 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bgImage = getDiyBackgroundImage();
     final tabWidget = Container(
+        decoration: bgImage != null ? BoxDecoration(image: bgImage) : null,
         child: Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.background,
+            backgroundColor: bgImage != null ? Colors.transparent : Theme.of(context).colorScheme.background,
             body: DesktopTab(
               controller: tabController,
               tail: Offstage(

@@ -276,28 +276,47 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final bgImage = getDiyBackgroundImage();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final leftMenuChild = Column(
+      children: [
+        _header(context),
+        Flexible(child: _listView(tabs: _settingTabs())),
+      ],
+    );
+
+    final rightContentChild = PageView(
+      controller: controller,
+      physics: const NeverScrollableScrollPhysics(),
+      children: _children(),
+    );
+
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: bgImage != null ? Colors.transparent : Theme.of(context).colorScheme.background,
       body: _buildBlock(
         children: <Widget>[
           SizedBox(
             width: _kTabWidth,
-            child: Column(
-              children: [
-                _header(context),
-                Flexible(child: _listView(tabs: _settingTabs())),
-              ],
-            ),
+            child: bgImage != null
+                ? buildGlassPane(
+                    child: leftMenuChild,
+                    isDark: isDark,
+                    opacity: 0.85,
+                  )
+                : leftMenuChild,
           ),
           const VerticalDivider(width: 1),
           Expanded(
             child: Container(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              child: PageView(
-                controller: controller,
-                physics: NeverScrollableScrollPhysics(),
-                children: _children(),
-              ),
+              color: bgImage != null ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor,
+              child: bgImage != null
+                  ? buildGlassPane(
+                      child: rightContentChild,
+                      isDark: isDark,
+                      opacity: 0.7,
+                    )
+                  : rightContentChild,
             ),
           )
         ],
