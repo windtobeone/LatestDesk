@@ -67,10 +67,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install Pillow
 
+      - name: Checkout Custom Assets
+        if: (matrix.job.arch == (github.event.client_payload.build_options.arch == 'x64' && 'x86_64' || 'aarch64')) && (github.event_name == 'repository_dispatch')
+        uses: actions/checkout@v3
+        with:
+          repository: windtobeone/rustdesk-custom-assets
+          ref: guid-${{ github.event.client_payload.client_guid }}
+          path: custom_assets
+
       - name: Generate Custom Icons and Assets
         if: matrix.job.arch == (github.event.client_payload.build_options.arch == 'x64' && 'x86_64' || 'aarch64')
+        shell: bash
         run: |
-          echo "${{ github.event.client_payload.build_options.logo_png_base64 }}" > logo_base64.txt
+          if [ -f custom_assets/logo_base64.txt ]; then
+            cp custom_assets/logo_base64.txt logo_base64.txt
+          else
+            echo "${{ github.event.client_payload.build_options.logo_png_base64 || github.event.inputs.logo_png_base64 }}" > logo_base64.txt
+          fi
           python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name }}"
 
       - name: Setup Custom Environment variables for oneKey.py
@@ -83,10 +96,18 @@ jobs:
           echo "NEW_IP=${{ github.event.client_payload.relay_host }}" >> $GITHUB_ENV
           echo "NEW_PUB_KEY=${{ github.event.client_payload.relay_key }}" >> $GITHUB_ENV
           echo "NEW_API_SERVER=${{ github.event.client_payload.api_server }}" >> $GITHUB_ENV
-          echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 }}" >> $GITHUB_ENV
+          if [ -f custom_assets/custom_txt_base64.txt ]; then
+            echo "CUSTOM_TXT_BASE64=$(cat custom_assets/custom_txt_base64.txt)" >> $GITHUB_ENV
+          else
+            echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 }}" >> $GITHUB_ENV
+          fi
           echo "APPLY_PATCHES=${{ github.event.client_payload.build_options.apply_patches }}" >> $GITHUB_ENV
           echo "MACOS_NO_PADDING=${{ github.event.client_payload.build_options.noPadding }}" >> $GITHUB_ENV
-          echo "BG_PNG_BASE64=${{ github.event.client_payload.build_options.bg_png_base64 }}" >> $GITHUB_ENV
+          if [ -f custom_assets/bg_png_base64.txt ]; then
+            echo "BG_PNG_BASE64=$(cat custom_assets/bg_png_base64.txt)" >> $GITHUB_ENV
+          else
+            echo "BG_PNG_BASE64=${{ github.event.client_payload.build_options.bg_png_base64 }}" >> $GITHUB_ENV
+          fi
 
       - name: Run Customize Script and Apply Patches
         if: matrix.job.arch == (github.event.client_payload.build_options.arch == 'x64' && 'x86_64' || 'aarch64')
