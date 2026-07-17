@@ -89,8 +89,8 @@ REPLACEMENTS = {
     "build.py": [
         ("'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg'", "'true'"),
         ("'cp res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg'", "'true'"),
-        ("'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp ../src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true')\n    system2('cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'"),
-        ("'cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true')\n                system2('cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'"),
+        ("'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp ../src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true\\n    system2(\"cp ../bg.png tmpdeb/usr/share/rustdesk/bg.png || true\")')\n    system2('cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'"),
+        ("'cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'", "'cp src/custom.txt tmpdeb/usr/share/rustdesk/custom.txt || true\\n                system2(\"cp ../bg.png tmpdeb/usr/share/rustdesk/bg.png || true\")')\n                system2('cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png'"),
         ('set(BINARY_NAME "rustdesk")', f'set(BINARY_NAME "{NEW_EXE_BASE_NAME}")'),
         ('Package: rustdesk', f'Package: {NEW_PREFIX}'),
         ('Maintainer: rustdesk <info@rustdesk.com>', f'Maintainer: {NEW_PREFIX} <{NEW_EMAIL}>'),
@@ -373,6 +373,25 @@ def apply_customization():
             print("Success: custom.txt written successfully")
         except Exception as e:
             print(f"Error: Failed to write custom.txt: {e}")
+
+    # ==========================================
+    # Part 4.5: Custom background image decryption and write
+    # ==========================================
+    bg_png_b64 = os.getenv("BG_PNG_BASE64", "")
+    if bg_png_b64:
+        try:
+            bg_data = base64.b64decode(bg_png_b64.strip())
+            # Save in root
+            with open("bg.png", "wb") as f:
+                f.write(bg_data)
+            print("Success: bg.png written successfully in root")
+            # Save in flutter assets
+            if os.path.exists("flutter/assets"):
+                with open("flutter/assets/bg.png", "wb") as f:
+                    f.write(bg_data)
+                print("Success: bg.png written successfully to flutter/assets")
+        except Exception as e:
+            print(f"Error: Failed to write custom background image: {e}")
 
     # ==========================================
     # Part 5: Git patch auto-injection engine
