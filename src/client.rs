@@ -509,22 +509,36 @@ impl Client {
                                 _ => bail!("other punch hole failure"),
                             }
                         } else {
+                            let is_local_ph = ph.is_local();
+                            let is_udp_ph = ph.is_udp;
+                            let socket_addr_v6_ph = ph.socket_addr_v6.clone();
                             peer_nat_type = ph.nat_type();
                             is_local = ph.is_local();
                             signed_id_pk = ph.pk.into();
                             relay_server = ph.relay_server;
                             peer_addr = AddrMangle::decode(&ph.socket_addr);
                             feedback = ph.feedback;
-                            let s = udp.0.take();
-                            if ph.is_udp && s.is_some() {
+                            let mut s = udp.0.take();
+                            if is_local_ph && s.is_some() {
+                                let mut local_udp_addr = my_addr;
+                                local_udp_addr.set_port(my_addr.port() + 1);
+                                if let Ok(new_socket) = tokio::net::UdpSocket::bind(local_udp_addr).await {
+                                    s = Some(Arc::new(new_socket));
+                                }
+                            }
+                            if (is_udp_ph || is_local_ph) && s.is_some() {
                                 if let Some(s) = s {
-                                    allow_err!(s.connect(peer_addr).await);
+                                    let mut peer_addr_udp = peer_addr;
+                                    if is_local_ph {
+                                        peer_addr_udp.set_port(peer_addr.port() + 1);
+                                    }
+                                    allow_err!(s.connect(peer_addr_udp).await);
                                     udp.0 = Some(s);
                                 }
                             }
                             let s = ipv6.0.take();
-                            if !ph.socket_addr_v6.is_empty() && s.is_some() {
-                                let addr = AddrMangle::decode(&ph.socket_addr_v6);
+                            if !socket_addr_v6_ph.is_empty() && s.is_some() {
+                                let addr = AddrMangle::decode(&socket_addr_v6_ph);
                                 if addr.port() > 0 {
                                     if let Some(s) = s {
                                         allow_err!(s.connect(addr).await);
@@ -578,6 +592,7 @@ impl Client {
                                         &key_c,
                                         conn_type,
                                         my_addr.is_ipv4(),
+                                        0x00,
                                     ).await?;
                                     Ok((res.0, res.1, "KCP"))
                                 }
@@ -751,13 +766,18 @@ impl Client {
             .boxed(),
         );
         if let Some(udp_socket_nat) = udp_socket_nat {
+            let mut peer_udp = peer;
+            if is_local {
+                peer_udp.set_port(peer.port() + 1);
+            }
+            udp_socket_nat.connect(peer_udp).await.ok();
             connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP", connect_timeout).boxed());
         }
         if let Some(udp_socket_v6) = udp_socket_v6 {
             connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6", connect_timeout).boxed());
         }
         // Run all connection attempts concurrently, return the first successful one
-        let (mut conn, kcp, mut typ) = match select_ok(connect_futures).await {
+        let (mut conn, mut kcp, mut typ) = match select_ok(connect_futures).await {
             Ok(conn) => (Ok(conn.0 .0), conn.0 .1, conn.0 .2),
             Err(e) => (Err(e), None, ""),
         };
@@ -765,7 +785,7 @@ impl Client {
         let mut direct = !conn.is_err();
         if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
-                conn = Self::request_relay(
+                let res = Self::request_relay(
                     peer_id,
                     relay_server.to_owned(),
                     rendezvous_server,
@@ -775,12 +795,15 @@ impl Client {
                     conn_type,
                 )
                 .await;
-                if let Err(e) = conn {
+                if let Err(e) = res {
                     // this direct is mainly used by on_establish_connection_error, so we update it here before bail
                     interface.update_direct(Some(false));
                     bail!("Failed to connect via relay server: {}", e);
                 }
-                typ = "Relay";
+                let (c, k, t) = res.unwrap();
+                conn = Ok(c);
+                kcp = k;
+                typ = t;
                 direct = false;
             } else {
                 bail!("Failed to make direct connection to remote desktop");
@@ -893,7 +916,7 @@ impl Client {
         key: &str,
         token: &str,
         conn_type: ConnType,
-    ) -> ResultType<Stream> {
+    ) -> ResultType<(Stream, Option<KcpStream>, &'static str)> {
         let mut succeed = false;
         let mut uuid = "".to_owned();
         let mut ipv4 = true;
@@ -945,7 +968,73 @@ impl Client {
         if !succeed {
             bail!("Timeout");
         }
-        Self::create_relay(peer, uuid, relay_server, key, conn_type, ipv4).await
+
+        use hbb_common::futures::FutureExt;
+        let mut connect_futures: Vec<
+            std::pin::Pin<
+                Box<
+                    dyn std::future::Future<
+                            Output = Result<(Stream, Option<KcpStream>, &'static str), hbb_common::anyhow::Error>,
+                        > + Send,
+                >,
+            >,
+        > = Vec::new();
+        
+        let try_udp = !crate::is_udp_disabled();
+        
+        if try_udp {
+            let peer_c = peer.to_owned();
+            let uuid_c = uuid.clone();
+            let rs_c = relay_server.clone();
+            let key_c = key.to_owned();
+            connect_futures.push(
+                async move {
+                    let res = Self::create_relay_kcp(
+                        &peer_c,
+                        uuid_c,
+                        rs_c,
+                        &key_c,
+                        conn_type,
+                        ipv4,
+                        0x00, // ClientToServer direction
+                    )
+                    .await?;
+                    Ok(res)
+                }
+                .boxed()
+            );
+        }
+        
+        {
+            let peer_c = peer.to_owned();
+            let uuid_c = uuid.clone();
+            let rs_c = relay_server.clone();
+            let key_c = key.to_owned();
+            connect_futures.push(
+                async move {
+                    if try_udp {
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                    }
+                    let res = Self::create_relay(
+                        &peer_c,
+                        uuid_c,
+                        rs_c,
+                        &key_c,
+                        conn_type,
+                        ipv4,
+                    )
+                    .await?;
+                    Ok((res, None, "Relay"))
+                }
+                .boxed()
+            );
+        }
+        
+        let (conn, kcp, typ) = match hbb_common::futures::future::select_ok(connect_futures).await {
+            Ok(res) => (res.0 .0, res.0 .1, res.0 .2),
+            Err(e) => return Err(e),
+        };
+        Ok((conn, kcp, typ))
     }
 
     /// Create a relay connection to the server.
@@ -975,13 +1064,14 @@ impl Client {
         Ok(conn)
     }
 
-    async fn create_relay_kcp(
+    pub(crate) async fn create_relay_kcp(
         peer: &str,
         uuid: String,
         relay_server: String,
         key: &str,
         conn_type: ConnType,
         ipv4: bool,
+        direction: u8,
     ) -> ResultType<(Stream, Option<KcpStream>, &'static str)> {
         let session_id = {
             use std::collections::hash_map::DefaultHasher;
@@ -1007,6 +1097,7 @@ impl Client {
             Some(session_id),
             Some(actual_key.to_string()),
             1, // Channel 1: Control
+            direction,
         ).await?;
         
         let mut msg_out = RendezvousMessage::new();
@@ -4353,7 +4444,7 @@ async fn udp_nat_connect(
             log::debug!("{err}");
             anyhow!(err)
         })?;
-    let res = KcpStream::connect(socket, Duration::from_millis(ms_timeout), None, None, 0)
+    let res = KcpStream::connect(socket, Duration::from_millis(ms_timeout), None, None, 0, 0x00)
         .await
         .map_err(|err| {
             log::debug!("Failed to connect KCP stream: {}", err);

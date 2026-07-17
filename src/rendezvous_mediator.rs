@@ -629,6 +629,23 @@ impl RendezvousMediator {
         });
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
+        if !crate::is_udp_disabled() {
+            let mut local_udp_addr = local_addr;
+            local_udp_addr.set_port(local_addr.port() + 1);
+            let mut peer_udp_addr = peer_addr;
+            peer_udp_addr.set_port(peer_addr.port() + 1);
+            let server_c = server.clone();
+            let cp_c = fla.control_permissions.clone().into_option();
+            tokio::spawn(async move {
+                if let Ok(socket) = tokio::net::UdpSocket::bind(local_udp_addr).await {
+                    let socket = Arc::new(socket);
+                    log::debug!("Spawning UDP listen for intranet from {:?}", peer_udp_addr);
+                    allow_err!(udp_nat_listen(socket, peer_udp_addr, peer_addr, server_c, cp_c).await);
+                } else {
+                    log::debug!("Failed to bind intranet UDP socket to {:?}", local_udp_addr);
+                }
+            });
+        }
         crate::accept_connection(
             server.clone(),
             socket,
@@ -974,6 +991,7 @@ async fn udp_nat_listen(
             None,
             None,
             0,
+            0x01,
         )
         .await?;
         crate::server::create_tcp_connection(

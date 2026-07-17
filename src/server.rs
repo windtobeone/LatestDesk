@@ -321,19 +321,74 @@ async fn create_relay_connection_(
     ipv4: bool,
     control_permissions: Option<ControlPermissions>,
 ) -> ResultType<()> {
-    let mut stream = socket_client::connect_tcp(
-        socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
-        CONNECT_TIMEOUT,
-    )
-    .await?;
-    let mut msg_out = RendezvousMessage::new();
-    let licence_key = crate::get_key(true).await;
-    msg_out.set_request_relay(RequestRelay {
-        licence_key,
-        uuid,
-        ..Default::default()
-    });
-    stream.send(&msg_out).await?;
+    use hbb_common::futures::future::select_ok;
+    use hbb_common::futures::FutureExt;
+
+    let mut connect_futures: Vec<
+        std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<(Stream, &'static str), hbb_common::anyhow::Error>,
+                    > + Send,
+            >,
+        >,
+    > = Vec::new();
+    let try_udp = !crate::is_udp_disabled();
+
+    if try_udp {
+        let uuid_c = uuid.clone();
+        let rs_c = relay_server.clone();
+        connect_futures.push(
+            async move {
+                let key = crate::get_key(true).await;
+                // VM is the Host/controlled side, so pass direction = 0x01 (HostToServer)
+                let res = crate::client::Client::create_relay_kcp(
+                    "",
+                    uuid_c,
+                    rs_c,
+                    &key,
+                    ConnType::default(),
+                    ipv4,
+                    0x01,
+                )
+                .await?;
+                Ok((res.0, "KCP"))
+            }
+            .boxed()
+        );
+    }
+
+    let uuid_c = uuid.clone();
+    let rs_c = relay_server.clone();
+    connect_futures.push(
+        async move {
+            if try_udp {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+            let mut stream = socket_client::connect_tcp(
+                socket_client::ipv4_to_ipv6(crate::check_port(rs_c, RELAY_PORT), ipv4),
+                CONNECT_TIMEOUT,
+            )
+            .await?;
+            let mut msg_out = RendezvousMessage::new();
+            let licence_key = crate::get_key(true).await;
+            msg_out.set_request_relay(RequestRelay {
+                licence_key,
+                uuid: uuid_c,
+                ..Default::default()
+            });
+            stream.send(&msg_out).await?;
+            Ok((stream, "TCP"))
+        }
+        .boxed()
+    );
+
+    let (stream, conn_type) = match select_ok(connect_futures).await {
+        Ok(res) => res.0,
+        Err(e) => bail!("Failed to connect to relay server: {}", e),
+    };
+
+    log::info!("Relay connection established successfully via {}", conn_type);
     create_tcp_connection(server, stream, peer_addr, secure, control_permissions).await?;
     Ok(())
 }
