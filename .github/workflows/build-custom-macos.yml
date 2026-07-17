@@ -70,7 +70,7 @@ jobs:
       - name: Generate Custom Icons and Assets
         if: matrix.job.arch == (github.event.client_payload.build_options.arch == 'x64' && 'x86_64' || 'aarch64')
         run: |
-          echo "${{ github.event.client_payload.logo_png_base64 }}" > logo_base64.txt
+          echo "${{ github.event.client_payload.build_options.logo_png_base64 }}" > logo_base64.txt
           python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name }}"
 
       - name: Setup Custom Environment variables for oneKey.py
@@ -86,7 +86,7 @@ jobs:
           echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 }}" >> $GITHUB_ENV
           echo "APPLY_PATCHES=${{ github.event.client_payload.build_options.apply_patches }}" >> $GITHUB_ENV
           echo "MACOS_NO_PADDING=${{ github.event.client_payload.build_options.noPadding }}" >> $GITHUB_ENV
-          echo "BG_PNG_BASE64=${{ github.event.client_payload.bg_png_base64 }}" >> $GITHUB_ENV
+          echo "BG_PNG_BASE64=${{ github.event.client_payload.build_options.bg_png_base64 }}" >> $GITHUB_ENV
 
       - name: Run Customize Script and Apply Patches
         if: matrix.job.arch == (github.event.client_payload.build_options.arch == 'x64' && 'x86_64' || 'aarch64')

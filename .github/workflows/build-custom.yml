@@ -168,7 +168,7 @@ jobs:
 
       - name: Generate Custom Icons and Assets
         run: |
-          Set-Content -Path logo_base64.txt -Value "${{ github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}"
+          Set-Content -Path logo_base64.txt -Value "${{ github.event.client_payload.build_options.logo_png_base64 || github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}"
           python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name || github.event.inputs.client_name }}"
 
       - name: Setup Custom Environment variables for oneKey.py
@@ -182,7 +182,7 @@ jobs:
           echo "NEW_API_SERVER=${{ github.event.client_payload.api_server || github.event.inputs.api_server }}" >> $GITHUB_ENV
           echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 || github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
           echo "APPLY_PATCHES=${{ github.event.client_payload.build_options.apply_patches || github.event.client_payload.apply_patches || github.event.inputs.apply_patches }}" >> $GITHUB_ENV
-          echo "BG_PNG_BASE64=${{ github.event.client_payload.bg_png_base64 || github.event.inputs.bg_png_base64 }}" >> $GITHUB_ENV
+          echo "BG_PNG_BASE64=${{ github.event.client_payload.build_options.bg_png_base64 || github.event.client_payload.bg_png_base64 || github.event.inputs.bg_png_base64 }}" >> $GITHUB_ENV
 
       - name: Run Customize Script and Apply Patches
         run: |
@@ -325,7 +325,7 @@ jobs:
 
       - name: Generate Custom Icons and Assets
         run: |
-          Set-Content -Path logo_base64.txt -Value "${{ github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}"
+          Set-Content -Path logo_base64.txt -Value "${{ github.event.client_payload.build_options.logo_png_base64 || github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}"
           python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name || github.event.inputs.client_name }}"
 
       - name: Setup Custom Environment variables for oneKey.py
@@ -339,7 +339,7 @@ jobs:
           echo "NEW_API_SERVER=${{ github.event.client_payload.api_server || github.event.inputs.api_server }}" >> $GITHUB_ENV
           echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 || github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
           echo "APPLY_PATCHES=${{ github.event.client_payload.apply_patches || github.event.inputs.apply_patches }}" >> $GITHUB_ENV
-          echo "BG_PNG_BASE64=${{ github.event.client_payload.bg_png_base64 || github.event.inputs.bg_png_base64 }}" >> $GITHUB_ENV
+          echo "BG_PNG_BASE64=${{ github.event.client_payload.build_options.bg_png_base64 || github.event.client_payload.bg_png_base64 || github.event.inputs.bg_png_base64 }}" >> $GITHUB_ENV
 
       - name: Run Customize Script and Apply Patches
         run: |
@@ -456,7 +456,7 @@ jobs:
 
       - name: Generate Custom Icons and Assets
         run: |
-          Set-Content -Path logo_base64.txt -Value "${{ github.event.client_payload.logo_png_base64 || github.event.inputs.logo_png_base64 }}"
+          Set-Content -Path logo_base64.txt -Value "${{ github.event.client_payload.build_options.logo_png_base64 || github.event.inputs.logo_png_base64 }}"
           python make_icons.py logo_base64.txt "${{ github.event.client_payload.client_name || github.event.inputs.client_name }}"
 
       - name: Setup Custom Environment variables for oneKey.py
@@ -470,7 +470,7 @@ jobs:
           echo "NEW_API_SERVER=${{ github.event.client_payload.api_server || github.event.inputs.api_server }}" >> $GITHUB_ENV
           echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 || github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
           echo "APPLY_PATCHES=${{ github.event.client_payload.apply_patches || github.event.inputs.apply_patches }}" >> $GITHUB_ENV
-          echo "BG_PNG_BASE64=${{ github.event.client_payload.bg_png_base64 || github.event.inputs.bg_png_base64 }}" >> $GITHUB_ENV
+          echo "BG_PNG_BASE64=${{ github.event.client_payload.build_options.bg_png_base64 || github.event.client_payload.bg_png_base64 || github.event.inputs.bg_png_base64 }}" >> $GITHUB_ENV
 
       - name: Run Customize Script and Apply Patches
         run: |
