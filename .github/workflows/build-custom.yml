@@ -182,6 +182,7 @@ jobs:
           echo "NEW_API_SERVER=${{ github.event.client_payload.api_server || github.event.inputs.api_server }}" >> $GITHUB_ENV
           echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 || github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
           echo "APPLY_PATCHES=${{ github.event.client_payload.build_options.apply_patches || github.event.client_payload.apply_patches || github.event.inputs.apply_patches }}" >> $GITHUB_ENV
+          echo "BG_PNG_BASE64=${{ github.event.client_payload.bg_png_base64 || github.event.inputs.bg_png_base64 }}" >> $GITHUB_ENV
 
       - name: Run Customize Script and Apply Patches
         run: |
@@ -194,6 +195,9 @@ jobs:
 
           # 2. Create raw release structure
           mkdir ./Release_Flutter
+          if (Test-Path bg.png) {
+            Copy-Item bg.png ./Release_Flutter/bg.png -Force
+          }
           mv ./flutter/build/windows/x64/runner/Release/* ./Release_Flutter/
           Get-ChildItem ./Release_Flutter/*.exe | Rename-Item -NewName $env:NEW_EXE_NAME
 
@@ -335,6 +339,7 @@ jobs:
           echo "NEW_API_SERVER=${{ github.event.client_payload.api_server || github.event.inputs.api_server }}" >> $GITHUB_ENV
           echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 || github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
           echo "APPLY_PATCHES=${{ github.event.client_payload.apply_patches || github.event.inputs.apply_patches }}" >> $GITHUB_ENV
+          echo "BG_PNG_BASE64=${{ github.event.client_payload.bg_png_base64 || github.event.inputs.bg_png_base64 }}" >> $GITHUB_ENV
 
       - name: Run Customize Script and Apply Patches
         run: |
@@ -465,6 +470,7 @@ jobs:
           echo "NEW_API_SERVER=${{ github.event.client_payload.api_server || github.event.inputs.api_server }}" >> $GITHUB_ENV
           echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 || github.event.inputs.custom_txt_base64 }}" >> $GITHUB_ENV
           echo "APPLY_PATCHES=${{ github.event.client_payload.apply_patches || github.event.inputs.apply_patches }}" >> $GITHUB_ENV
+          echo "BG_PNG_BASE64=${{ github.event.client_payload.bg_png_base64 || github.event.inputs.bg_png_base64 }}" >> $GITHUB_ENV
 
       - name: Run Customize Script and Apply Patches
         run: |

@@ -86,6 +86,7 @@ jobs:
           echo "CUSTOM_TXT_BASE64=${{ github.event.client_payload.custom_txt_base64 }}" >> $GITHUB_ENV
           echo "APPLY_PATCHES=${{ github.event.client_payload.build_options.apply_patches }}" >> $GITHUB_ENV
           echo "MACOS_NO_PADDING=${{ github.event.client_payload.build_options.noPadding }}" >> $GITHUB_ENV
+          echo "BG_PNG_BASE64=${{ github.event.client_payload.bg_png_base64 }}" >> $GITHUB_ENV
 
       - name: Run Customize Script and Apply Patches
         if: matrix.job.arch == (github.event.client_payload.build_options.arch == 'x64' && 'x86_64' || 'aarch64')
@@ -199,6 +200,9 @@ jobs:
             sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
           fi
           ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
+          if [ -f bg.png ]; then
+            cp bg.png ./flutter/build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/bg.png || true
+          fi
 
       - name: create unsigned dmg
         if: matrix.job.arch == (github.event.client_payload.build_options.arch == 'x64' && 'x86_64' || 'aarch64')
