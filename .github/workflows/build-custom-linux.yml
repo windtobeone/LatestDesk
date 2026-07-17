@@ -76,6 +76,7 @@ jobs:
         if: matrix.job.arch == (github.event.client_payload.build_options.arch == 'x64' && 'x86_64' || 'aarch64')
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ github.event.client_payload.branch || 'main' }}
           submodules: recursive
 
       - name: Setup Python for Customization
