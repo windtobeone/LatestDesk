@@ -220,6 +220,44 @@ pub async fn new_direct_udp_for(target: &str) -> ResultType<(Arc<UdpSocket>, Soc
     let peer_addr = test_target(target).await?;
     let local_addr = Config::get_any_listen_addr(peer_addr.is_ipv4());
     let socket = UdpSocket::bind(local_addr).await?;
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::io::AsRawSocket;
+        use std::ffi::c_void;
+
+        #[link(name = "ws2_32")]
+        extern "system" {
+            fn WSAIoctl(
+                s: usize,
+                dwIoControlCode: u32,
+                lpvInBuffer: *const c_void,
+                cbInBuffer: u32,
+                lpvOutBuffer: *mut c_void,
+                cbOutBuffer: u32,
+                lpcbBytesReturned: *mut u32,
+                lpOverlapped: *mut c_void,
+                lpCompletionRoutine: *mut c_void,
+            ) -> i32;
+        }
+
+        const SIO_UDP_CONNRESET: u32 = 0x9800000C;
+        let mut bytes_returned = 0;
+        let mut flag = 0u32; // 0 to disable
+        let raw_socket = socket.as_raw_socket() as usize;
+        unsafe {
+            WSAIoctl(
+                raw_socket,
+                SIO_UDP_CONNRESET,
+                &mut flag as *mut _ as *const c_void,
+                std::mem::size_of::<u32>() as u32,
+                std::ptr::null_mut(),
+                0,
+                &mut bytes_returned,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
+        }
+    }
     Ok((Arc::new(socket), peer_addr))
 }
 
