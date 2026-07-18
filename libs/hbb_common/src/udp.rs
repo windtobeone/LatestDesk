@@ -30,6 +30,45 @@ fn new_socket(addr: SocketAddr, reuse: bool, buf_size: usize) -> Result<Socket, 
     }
     // only nonblocking work with tokio, https://stackoverflow.com/questions/64649405/receiver-on-tokiompscchannel-only-receives-messages-when-buffer-is-full
     socket.set_nonblocking(true)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::io::AsRawSocket;
+        use std::ffi::c_void;
+
+        #[link(name = "ws2_32")]
+        extern "system" {
+            fn WSAIoctl(
+                s: usize,
+                dwIoControlCode: u32,
+                lpvInBuffer: *const c_void,
+                cbInBuffer: u32,
+                lpvOutBuffer: *mut c_void,
+                cbOutBuffer: u32,
+                lpcbBytesReturned: *mut u32,
+                lpOverlapped: *mut c_void,
+                lpCompletionRoutine: *mut c_void,
+            ) -> i32;
+        }
+
+        const SIO_UDP_CONNRESET: u32 = 0x9800000C;
+        let mut bytes_returned = 0;
+        let mut flag = 0u32; // 0 to disable
+        let raw_socket = socket.as_raw_socket() as usize;
+        unsafe {
+            WSAIoctl(
+                raw_socket,
+                SIO_UDP_CONNRESET,
+                &mut flag as *mut _ as *const c_void,
+                std::mem::size_of::<u32>() as u32,
+                std::ptr::null_mut(),
+                0,
+                &mut bytes_returned,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
+        }
+    }
     
     // 🛡️ 刚性加固：彻底消灭主机内部的隐形丢包，将发送和接收内核缓冲区扩大至 2MB，容纳 KCP 快速重传 Burst 发送
     let target_buffer_size = if buf_size > 0 { buf_size } else { 2 * 1024 * 1024 };
