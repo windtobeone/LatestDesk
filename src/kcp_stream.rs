@@ -220,6 +220,11 @@ impl KcpStream {
         channel_id: u8,
         direction: u8,
     ) -> ResultType<(Self, Stream)> {
+        #[cfg(target_os = "windows")]
+        if let Err(e) = disable_connection_reset(&udp_socket) {
+            log::warn!("Failed to disable SIO_UDP_CONNRESET on accept: {:?}", e);
+        }
+
         let mut endpoint = KcpEndpoint::new();
         endpoint.run().await;
 
@@ -259,6 +264,11 @@ impl KcpStream {
         channel_id: u8,
         direction: u8,
     ) -> ResultType<(Self, Stream)> {
+        #[cfg(target_os = "windows")]
+        if let Err(e) = disable_connection_reset(&udp_socket) {
+            log::warn!("Failed to disable SIO_UDP_CONNRESET on connect: {:?}", e);
+        }
+
         let mut endpoint = KcpEndpoint::new();
 
         let mut negotiated_mtu = 1400;
@@ -326,6 +336,11 @@ impl KcpStream {
         channel_id: u8,
         direction: u8,
     ) {
+        #[cfg(target_os = "windows")]
+        if let Err(e) = disable_connection_reset(&udp_socket) {
+            log::warn!("Failed to disable SIO_UDP_CONNRESET on kcp_io: {:?}", e);
+        }
+
         let udp = udp_socket.clone();
         tokio::spawn(async move {
             let mut buf = vec![0; 65536];
@@ -442,5 +457,51 @@ impl Drop for KcpStream {
         if let Some(sender) = self.stop_sender.take() {
             let _ = sender.send(());
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn disable_connection_reset(socket: &tokio::net::UdpSocket) -> std::io::Result<()> {
+    use std::os::windows::io::AsRawSocket;
+    use std::ffi::c_void;
+
+    #[link(name = "ws2_32")]
+    extern "system" {
+        fn WSAIoctl(
+            s: usize,
+            dwIoControlCode: u32,
+            lpvInBuffer: *const c_void,
+            cbInBuffer: u32,
+            lpvOutBuffer: *mut c_void,
+            cbOutBuffer: u32,
+            lpcbBytesReturned: *mut u32,
+            lpOverlapped: *mut c_void,
+            lpCompletionRoutine: *mut c_void,
+        ) -> i32;
+    }
+
+    const SIO_UDP_CONNRESET: u32 = 0x9800000C;
+    let mut bytes_returned = 0;
+    let mut flag = 0u32; // 0 to disable
+
+    let raw_socket = socket.as_raw_socket() as usize;
+    let r = unsafe {
+        WSAIoctl(
+            raw_socket,
+            SIO_UDP_CONNRESET,
+            &mut flag as *mut _ as *const c_void,
+            std::mem::size_of::<u32>() as u32,
+            std::ptr::null_mut(),
+            0,
+            &mut bytes_returned,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+
+    if r != 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
