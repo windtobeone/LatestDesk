@@ -24,6 +24,9 @@ pub fn is_rd_printer_installed(app_name: &str) -> ResultType<bool> {
 }
 
 fn get_wstr_bytes(p: LPWSTR) -> Vec<u16> {
+    if p.is_null() {
+        return vec![];
+    }
     let mut vec_bytes = vec![];
     unsafe {
         let len: isize = lstrlenW(p) as _;
@@ -44,6 +47,9 @@ fn is_name_equal(name: &PCWSTR, name_from_api: LPCWSTR) -> bool {
     // Note that specifying these values slows performance, so use them only when necessary.
     //
     //  No need to consider `CompareStringEx` for now.
+    if name_from_api.is_null() {
+        return false;
+    }
     unsafe { lstrcmpiW(name.as_ptr(), name_from_api) == 0 }
 }
 
