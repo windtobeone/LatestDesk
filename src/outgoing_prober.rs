@@ -9,17 +9,24 @@ use hbb_common::rendezvous_proto::{RendezvousMessage, TestNatRequest, rendezvous
 use crate::ui_interface::UI_STATUS;
 
 pub async fn start_prober(rendezvous_server: &str) -> ResultType<()> {
-    // 1. Resolve host address
-    let rendezvous_addr: SocketAddr = if let Ok(addr) = rendezvous_server.parse() {
+    // 1. Ensure target server string contains default port 21116 if omitted
+    let server_str = if !rendezvous_server.contains(':') {
+        format!("{}:21116", rendezvous_server)
+    } else {
+        rendezvous_server.to_string()
+    };
+
+    // 2. Resolve host address
+    let rendezvous_addr: SocketAddr = if let Ok(addr) = server_str.parse() {
         addr
     } else {
-        hbb_common::tokio::net::lookup_host(rendezvous_server)
+        hbb_common::tokio::net::lookup_host(&server_str)
             .await?
             .next()
             .ok_or_else(|| anyhow::anyhow!("Failed to resolve rendezvous host"))?
     };
 
-    // 2. Bind local socket
+    // 3. Bind local socket
     let socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
     let mut interval = time::interval(Duration::from_secs(10));
     let mut buf = [0u8; 1024];
@@ -40,11 +47,19 @@ pub async fn start_prober(rendezvous_server: &str) -> ResultType<()> {
                     let _ = socket.send_to(&bytes, rendezvous_addr).await;
                 }
 
+                // Periodic refresh when online so IPC latency map doesn't stale
+                if is_online {
+                    hbb_common::config::Config::update_latency(&server_str, 1);
+                }
+
                 // If no response is received in 15 seconds, turn the status light red (-1)
-                if last_recv.elapsed() > Duration::from_secs(15) && is_online {
-                    is_online = false;
-                    UI_STATUS.lock().unwrap().status_num = -1;
-                    log::warn!("[Prober] Connection lost for target: '{}'", rendezvous_addr);
+                if last_recv.elapsed() > Duration::from_secs(15) {
+                    if is_online || UI_STATUS.lock().unwrap().status_num == 0 {
+                        is_online = false;
+                        UI_STATUS.lock().unwrap().status_num = -1;
+                        hbb_common::config::Config::update_latency(&server_str, -1);
+                        log::warn!("[Prober] Connection lost or failed for target: '{}'", rendezvous_addr);
+                    }
                 }
             }
 
@@ -54,9 +69,10 @@ pub async fn start_prober(rendezvous_server: &str) -> ResultType<()> {
                         if let Ok(reply) = RendezvousMessage::parse_from_bytes(&buf[..len]) {
                             if let Some(Union::TestNatResponse(_)) = reply.union {
                                 last_recv = Instant::now();
+                                UI_STATUS.lock().unwrap().status_num = 1; // Green status
+                                hbb_common::config::Config::update_latency(&server_str, 1); // Sync IPC status table
                                 if !is_online {
                                     is_online = true;
-                                    UI_STATUS.lock().unwrap().status_num = 1; // Green status
                                     log::info!("[Prober] Rendezvous server '{}' is ONLINE", rendezvous_addr);
                                 }
                             }
