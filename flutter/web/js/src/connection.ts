@@ -700,27 +700,36 @@ export default class Connection {
       var i = 0;
       const n = vf.vp9s?.frames.length;
       vf.vp9s.frames.forEach((f) => {
-        dec.processFrame(f.data.slice(0).buffer, (ok: any) => {
-          i++;
-          if (i == n) this.sendVideoReceived();
-          if (ok && dec.frameBuffer && n == i) {
-            this._fpsCount += 1;
-            this.draw(dec.frameBuffer);
-            const now = new Date().getTime();
-            var elapsed = now - tm;
-            this._videoTestSpeed[1] += elapsed;
-            this._videoTestSpeed[0] += 1;
-            if (this._videoTestSpeed[0] >= 30) {
-              console.log(
-                "video decoder: " +
-                  parseInt(
-                    "" + this._videoTestSpeed[1] / this._videoTestSpeed[0]
-                  )
-              );
-              this._videoTestSpeed = [0, 0];
+        try {
+          dec.processFrame(f.data.slice(0).buffer, (ok: any) => {
+            i++;
+            if (i == n) this.sendVideoReceived();
+            if (ok && dec.frameBuffer && n == i) {
+              this._fpsCount += 1;
+              try {
+                this.draw(dec.frameBuffer);
+              } catch (drawErr) {
+                console.error("[Connection Guard] Draw frame error:", drawErr);
+              }
+              const now = new Date().getTime();
+              var elapsed = now - tm;
+              this._videoTestSpeed[1] += elapsed;
+              this._videoTestSpeed[0] += 1;
+              if (this._videoTestSpeed[0] >= 30) {
+                console.log(
+                  "video decoder: " +
+                    parseInt(
+                      "" + this._videoTestSpeed[1] / this._videoTestSpeed[0]
+                    )
+                );
+                this._videoTestSpeed = [0, 0];
+              }
             }
-          }
-        });
+          });
+        } catch (procErr) {
+          console.error("[Connection Guard] processFrame error, triggering refreshVideo:", procErr);
+          this.refreshVideo();
+        }
       });
     }
   }
@@ -1061,6 +1070,32 @@ export default class Connection {
     }
     const misc = message.Misc.fromPartial({ option });
     this._ws?.sendMessage({ misc });
+  }
+
+  refreshVideo() {
+    console.log("[Connection] Sending out-of-band Misc::refresh_video (request I-frame) to host...");
+    try {
+      const option = [
+        message.OptionHeader.fromPartial({
+          key: "refresh_video",
+          value: "Y",
+        }),
+      ];
+      const misc = message.Misc.fromPartial({ option });
+      this._ws?.sendMessage({ misc });
+    } catch (e) {
+      console.error("[Connection] Failed to send refresh_video misc option:", e);
+    }
+  }
+
+  freezeViewport() {
+    console.log("[Connection Guard] Roaming/Disconnect detected: Viewport frozen.");
+    globals.pushEvent("freeze_viewport", { isRoaming: true });
+    try {
+      globals.getGpuRenderer()?.freezeViewport();
+    } catch (e) {
+      console.error("[Connection Guard] Failed to freeze gpuRenderer viewport:", e);
+    }
   }
 
   loadVideoDecoder() {

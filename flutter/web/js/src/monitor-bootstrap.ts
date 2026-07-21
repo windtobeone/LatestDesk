@@ -1,9 +1,17 @@
 // monitor-bootstrap.ts
 // 🎯 大屏监控端 (Web-Monitor) 专属前置引导注入脚本
+import { GpuConnectionRenderer } from "./gpu-renderer";
+
 (function () {
-  // 1. 注入大屏环境标记供网桥读取
+  // 1. 注入大屏环境标记与专用 GPU 渲染器构造器钩子
   (window as any).isMonitor = 'Y';
   (window as any).isMonitorFocused = false;
+  (window as any).initMonitorGpuRenderer = function(canvas: HTMLCanvasElement) {
+    console.log("[Monitor Bootstrap] Instantiating dedicated GpuConnectionRenderer for Web-Monitor...");
+    const renderer = new GpuConnectionRenderer(canvas);
+    (window as any).gpuRenderer = renderer;
+    return renderer;
+  };
 
   // 1.0 拦截 window.addEventListener 以防大屏动态 iframe 挂载时丢失 load 事件
   const originalAddEventListener = window.addEventListener;
@@ -211,6 +219,20 @@
       
       (window as any).isMonitorFocused = msg.isFocused === '1';
       
+      // Inject pointer-events: none style on Flutter HtmlElementView / canvas to prevent Shadow DOM input trapping
+      try {
+        const styleEl = document.createElement('style');
+        styleEl.textContent = `
+          flt-platform-view, flt-glass-pane, flt-scene-host {
+            pointer-events: none !important;
+          }
+        `;
+        document.head.appendChild(styleEl);
+        console.log("[Monitor Bootstrap Guard] Injected pointer-events: none style rule for Shadow DOM isolation.");
+      } catch (e) {
+        console.error("[Monitor Bootstrap Guard] Failed to inject pointer-events style:", e);
+      }
+
       // 唤醒挂起的 Flutter 加载
       if ((window as any).triggerFlutterInit) {
         (window as any).triggerFlutterInit();
