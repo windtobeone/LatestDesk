@@ -201,6 +201,13 @@
         }
         localStorage.setItem('key', key);
       }
+
+      // Save ID server host to custom-rendezvous-server in localStorage (fallback to current hostname)
+      const idServerHost = (msg.host && msg.host.trim()) || window.location.hostname;
+      if (idServerHost) {
+        localStorage.setItem('custom-rendezvous-server', idServerHost);
+        console.log("[Monitor Bootstrap] Set custom-rendezvous-server to:", idServerHost);
+      }
       
       (window as any).isMonitorFocused = msg.isFocused === '1';
       
