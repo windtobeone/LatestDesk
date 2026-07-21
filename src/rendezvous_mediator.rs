@@ -106,6 +106,15 @@ impl RendezvousMediator {
     pub async fn start_all() {
         crate::test_nat_type();
         if config::is_outgoing_only() {
+            let servers = Config::get_rendezvous_servers();
+            if !servers.is_empty() {
+                let host = servers[0].clone();
+                tokio::spawn(async move {
+                    if let Err(e) = crate::outgoing_prober::start_prober(&host).await {
+                        log::error!("Outgoing prober error: {}", e);
+                    }
+                });
+            }
             loop {
                 sleep(1.).await;
             }

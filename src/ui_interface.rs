@@ -55,7 +55,7 @@ pub struct LoginDeviceInfo {
 }
 
 lazy_static::lazy_static! {
-    static ref UI_STATUS : Arc<Mutex<UiStatus>> = Arc::new(Mutex::new(UiStatus{
+    pub(crate) static ref UI_STATUS : Arc<Mutex<UiStatus>> = Arc::new(Mutex::new(UiStatus{
         status_num: 0,
         #[cfg(not(feature = "flutter"))]
         key_confirmed: false,

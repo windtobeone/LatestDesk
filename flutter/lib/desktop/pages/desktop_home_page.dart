@@ -103,7 +103,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       buildTip(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
-      if (!isOutgoingOnly && !isIncomingOnly) buildControlRemotePanel(context),
+      if (!isIncomingOnly) buildControlRemotePanel(context),
       FutureBuilder<Widget>(
         future: Future.value(
             Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
