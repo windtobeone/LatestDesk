@@ -5296,6 +5296,7 @@ async fn start_ipc(
         #[allow(unused_assignments)]
         let hide_cm = Config::get_option("hide-cm") == "Y"
             || Config::get_option("silent-incoming") == "Y"
+            || Config::get_option("allow-hide-cm") == "Y"
             || Config::get_option("hide-cm-notification") == "Y";
         let mut args = if hide_cm {
             vec!["--cm-no-ui"]
