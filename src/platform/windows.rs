@@ -3711,7 +3711,9 @@ fn run_after_run_cmds(silent: bool) {
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .spawn());
     }
-    if Config::get_option("stop-service") != "Y" {
+    let hide_tray = Config::get_option("hide-tray") == "Y"
+        || Config::get_option("silent-incoming") == "Y";
+    if Config::get_option("stop-service") != "Y" && !hide_tray {
         allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
     }
     std::thread::sleep(std::time::Duration::from_millis(300));

@@ -89,7 +89,9 @@ pub fn core_main() -> Option<Vec<String>> {
         #[cfg(target_os = "windows")]
         let should_check_start_tray = crate::platform::is_self_service_running()
             && crate::platform::is_cur_exe_the_installed();
-        if should_check_start_tray && !crate::check_process("--tray", true) {
+        let hide_tray = hbb_common::config::Config::get_option("hide-tray") == "Y"
+            || hbb_common::config::Config::get_option("silent-incoming") == "Y";
+        if should_check_start_tray && !hide_tray && !crate::check_process("--tray", true) {
             #[cfg(target_os = "linux")]
             hbb_common::allow_err!(crate::platform::check_autostart_config());
             hbb_common::allow_err!(crate::run_me(vec!["--tray"]));

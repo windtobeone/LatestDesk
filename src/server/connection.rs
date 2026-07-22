@@ -2361,7 +2361,9 @@ impl Connection {
             });
             #[cfg(all(windows, feature = "flutter"))]
             std::thread::spawn(move || {
-                if crate::is_server() && !crate::check_process("--tray", false) {
+                let hide_tray = Config::get_option("hide-tray") == "Y"
+                    || Config::get_option("silent-incoming") == "Y";
+                if crate::is_server() && !hide_tray && !crate::check_process("--tray", false) {
                     crate::platform::run_as_user(vec!["--tray"]).ok();
                 }
             });
@@ -5292,7 +5294,14 @@ async fn start_ipc(
     if stream.is_none() {
         #[allow(unused_mut)]
         #[allow(unused_assignments)]
-        let mut args = vec!["--cm"];
+        let hide_cm = Config::get_option("hide-cm") == "Y"
+            || Config::get_option("silent-incoming") == "Y"
+            || Config::get_option("hide-cm-notification") == "Y";
+        let mut args = if hide_cm {
+            vec!["--cm-no-ui"]
+        } else {
+            vec!["--cm"]
+        };
         #[allow(unused_mut)]
         #[cfg(target_os = "linux")]
         let mut user = None;
