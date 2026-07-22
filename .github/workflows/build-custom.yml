@@ -637,6 +637,7 @@ jobs:
 
       - name: Delete Temporary Shadow Branch (Ephemeral Clean-up)
         if: always() && github.event_name == 'repository_dispatch' && github.event.client_payload.client_guid != ''
+        shell: bash
         run: |
           curl -X DELETE \
             -H "Authorization: token ${{ secrets.ASSETS_REPO_TOKEN }}" \
