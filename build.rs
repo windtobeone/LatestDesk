@@ -90,5 +90,6 @@ fn main() {
         build_mac();
         println!("cargo:rustc-link-lib=framework=ApplicationServices");
     }
+    println!("cargo:rerun-if-changed=src/custom.txt");
     println!("cargo:rerun-if-changed=build.rs");
 }

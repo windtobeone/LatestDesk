@@ -1,0 +1,4 @@
+# src/custom.txt
+# This is a static placeholder for custom client configurations.
+# In cloud builds, GitHub Actions will dynamically overwrite this file with signed configs.
+placeholder

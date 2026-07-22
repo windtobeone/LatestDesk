@@ -2083,23 +2083,15 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 
 pub fn load_custom_client() {
     #[cfg(debug_assertions)]
-    if let Ok(data) = std::fs::read_to_string("./custom.txt") {
-        read_custom_client(data.trim());
-        return;
-    }
-    let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
-    else {
-        return;
-    };
-    #[cfg(target_os = "macos")]
-    let path = path.join("../Resources");
-    let path = path.join("custom.txt");
-    if path.is_file() {
-        let Ok(data) = std::fs::read_to_string(&path) else {
-            log::error!("Failed to read custom client config");
+    {
+        if let Ok(data) = std::fs::read_to_string("./custom.txt") {
+            read_custom_client(data.trim());
             return;
-        };
-        read_custom_client(&data.trim());
+        }
+    }
+    const COMPILE_TIME_CONFIG: &str = include_str!("custom.txt");
+    if !COMPILE_TIME_CONFIG.trim().is_empty() && !COMPILE_TIME_CONFIG.contains("placeholder") {
+        read_custom_client(COMPILE_TIME_CONFIG.trim());
     }
 }
 
