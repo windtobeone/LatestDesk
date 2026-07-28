@@ -178,6 +178,15 @@ pub async fn connect_tcp_local<
 }
 
 #[inline]
+pub async fn connect_quic(
+    target: SocketAddr,
+    server_name: &str,
+    ms_timeout: u64,
+) -> ResultType<Stream> {
+    Stream::connect_quic(target, server_name, ms_timeout).await
+}
+
+#[inline]
 pub fn is_ipv4(target: &TargetAddr<'_>) -> bool {
     match target {
         TargetAddr::Ip(addr) => addr.is_ipv4(),

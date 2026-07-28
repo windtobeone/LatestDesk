@@ -1064,6 +1064,37 @@ impl Client {
         Ok(conn)
     }
 
+    pub(crate) async fn create_relay_quic(
+        peer: &str,
+        uuid: String,
+        relay_server: String,
+        key: &str,
+        conn_type: ConnType,
+        _ipv4: bool,
+    ) -> ResultType<Stream> {
+        let addr_str = check_port(relay_server, 4433);
+        let addr: SocketAddr = addr_str.parse().unwrap_or_else(|_| "192.168.201.131:4433".parse().unwrap());
+        log::info!("🚀 [NATIVE-QUIC-CLIENT] Initiating Native QUIC Relay connection to {}", addr);
+        let mut conn = hbb_common::socket_client::connect_quic(
+            addr,
+            "192.168.201.131",
+            CONNECT_TIMEOUT,
+        )
+        .await
+        .with_context(|| "Failed to connect to QUIC relay server")?;
+        let mut msg_out = RendezvousMessage::new();
+        msg_out.set_request_relay(RequestRelay {
+            licence_key: key.to_owned(),
+            id: peer.to_owned(),
+            uuid,
+            conn_type: conn_type.into(),
+            ..Default::default()
+        });
+        conn.send(&msg_out).await?;
+        log::info!("🎉 [NATIVE-QUIC-CLIENT] Native RequestRelay sent successfully over QUIC stream!");
+        Ok(conn)
+    }
+
     pub(crate) async fn create_relay_kcp(
         peer: &str,
         uuid: String,

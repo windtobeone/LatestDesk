@@ -1,16 +1,17 @@
-use crate::{config, tcp, websocket, ResultType};
+use crate::{config, tcp, websocket, quic, ResultType};
 #[cfg(feature = "webrtc")]
 use crate::webrtc;
 use sodiumoxide::crypto::secretbox::Key;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
-// support Websocket and tcp.
+// support Websocket, tcp, and QUIC.
 pub enum Stream {
     #[cfg(feature = "webrtc")]
     WebRTC(webrtc::WebRTCStream),
     WebSocket(websocket::WsFramedStream),
     Tcp(tcp::FramedStream),
+    Quic(quic::QuicFramedStream),
 }
 
 impl Stream {
@@ -21,6 +22,7 @@ impl Stream {
             Stream::WebRTC(s) => s.set_send_timeout(ms),
             Stream::WebSocket(s) => s.set_send_timeout(ms),
             Stream::Tcp(s) => s.set_send_timeout(ms),
+            Stream::Quic(s) => s.set_send_timeout(ms),
         }
     }
 
@@ -31,6 +33,7 @@ impl Stream {
             Stream::WebRTC(s) => s.set_raw(),
             Stream::WebSocket(s) => s.set_raw(),
             Stream::Tcp(s) => s.set_raw(),
+            Stream::Quic(s) => s.set_raw(),
         }
     }
 
@@ -41,6 +44,7 @@ impl Stream {
             Stream::WebRTC(s) => s.send_bytes(bytes).await,
             Stream::WebSocket(s) => s.send_bytes(bytes).await,
             Stream::Tcp(s) => s.send_bytes(bytes).await,
+            Stream::Quic(s) => s.send_bytes(bytes).await,
         }
     }
 
@@ -51,6 +55,7 @@ impl Stream {
             Stream::WebRTC(s) => s.send_raw(bytes).await,
             Stream::WebSocket(s) => s.send_raw(bytes).await,
             Stream::Tcp(s) => s.send_raw(bytes).await,
+            Stream::Quic(s) => s.send_raw(bytes).await,
         }
     }
 
@@ -61,6 +66,7 @@ impl Stream {
             Stream::WebRTC(s) => s.set_key(key),
             Stream::WebSocket(s) => s.set_key(key),
             Stream::Tcp(s) => s.set_key(key),
+            Stream::Quic(s) => s.set_key(key),
         }
     }
 
@@ -71,6 +77,7 @@ impl Stream {
             Stream::WebRTC(s) => s.is_secured(),
             Stream::WebSocket(s) => s.is_secured(),
             Stream::Tcp(s) => s.is_secured(),
+            Stream::Quic(s) => s.is_secured(),
         }
     }
 
@@ -84,10 +91,11 @@ impl Stream {
             Stream::WebRTC(s) => s.next_timeout(timeout).await,
             Stream::WebSocket(s) => s.next_timeout(timeout).await,
             Stream::Tcp(s) => s.next_timeout(timeout).await,
+            Stream::Quic(s) => s.next_timeout(timeout).await,
         }
     }
 
-    /// establish connect from websocket
+    /// establish connection from websocket
     #[inline]
     pub async fn connect_websocket(
         url: impl AsRef<str>,
@@ -101,6 +109,18 @@ impl Stream {
         Ok(Self::WebSocket(ws_stream))
     }
 
+    /// establish connection from QUIC UDP
+    #[inline]
+    pub async fn connect_quic(
+        target: SocketAddr,
+        server_name: &str,
+        timeout_ms: u64,
+    ) -> ResultType<Self> {
+        let quic_stream = quic::QuicFramedStream::connect(target, server_name, timeout_ms).await?;
+        log::info!("🚀 Native QUIC Stream connection established to {}", target);
+        Ok(Self::Quic(quic_stream))
+    }
+
     /// send message
     #[inline]
     pub async fn send(&mut self, msg: &impl protobuf::Message) -> ResultType<()> {
@@ -109,6 +129,10 @@ impl Stream {
             Self::WebRTC(s) => s.send(msg).await,
             Self::WebSocket(ws) => ws.send(msg).await,
             Self::Tcp(tcp) => tcp.send(msg).await,
+            Self::Quic(q) => {
+                let bytes = msg.write_to_bytes()?;
+                q.send_bytes(bytes.into()).await
+            }
         }
     }
 
@@ -120,6 +144,7 @@ impl Stream {
             Self::WebRTC(s) => s.next().await,
             Self::WebSocket(ws) => ws.next().await,
             Self::Tcp(tcp) => tcp.next().await,
+            Self::Quic(q) => q.next().await,
         }
     }
 
@@ -130,6 +155,7 @@ impl Stream {
             Self::WebRTC(s) => s.local_addr(),
             Self::WebSocket(ws) => ws.local_addr(),
             Self::Tcp(tcp) => tcp.local_addr(),
+            Self::Quic(q) => q.local_addr(),
         }
     }
 

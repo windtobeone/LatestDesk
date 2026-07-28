@@ -52,6 +52,8 @@ url = "2.5"
 sha2 = "0.10"
 whoami = "1.5"
 
+quinn = "0.10"
+rustls = { version = "0.21", default-features = false, features = ["dangerous_configuration", "logging"] }
 tokio-rustls = { version = "0.26", features = [
     "logging",
     "tls12",
