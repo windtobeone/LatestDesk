@@ -44,7 +44,7 @@ pub struct QuicFramedStream {
     send: SendStream,
     recv: RecvStream,
     addr: SocketAddr,
-    key: Option<sodiumoxide::crypto::secretbox::Key>,
+    key: Option<crate::tcp::Encrypt>,
     raw: bool,
     send_timeout_ms: u64,
 }
@@ -113,7 +113,7 @@ impl QuicFramedStream {
     }
 
     pub fn set_key(&mut self, key: sodiumoxide::crypto::secretbox::Key) {
-        self.key = Some(key);
+        self.key = Some(crate::tcp::Encrypt::new(key));
     }
 
     pub fn is_secured(&self) -> bool {
@@ -125,15 +125,20 @@ impl QuicFramedStream {
     }
 
     pub async fn send_bytes(&mut self, bytes: Bytes) -> ResultType<()> {
+        let bytes_to_send = if let Some(encrypt) = self.key.as_mut() {
+            Bytes::from(encrypt.enc(&bytes))
+        } else {
+            bytes
+        };
         if self.raw {
             tokio::time::timeout(
                 Duration::from_millis(self.send_timeout_ms),
-                self.send.write_all(&bytes)
+                self.send.write_all(&bytes_to_send)
             ).await.map_err(|_| anyhow::anyhow!("QUIC send timeout"))??;
         } else {
-            let mut frame = BytesMut::with_capacity(4 + bytes.len());
-            frame.put_u32_le(bytes.len() as u32);
-            frame.extend_from_slice(&bytes);
+            let mut frame = BytesMut::with_capacity(4 + bytes_to_send.len());
+            frame.put_u32_le(bytes_to_send.len() as u32);
+            frame.extend_from_slice(&bytes_to_send);
             
             tokio::time::timeout(
                 Duration::from_millis(self.send_timeout_ms),
@@ -157,8 +162,15 @@ impl QuicFramedStream {
             let mut buf = vec![0u8; 65536];
             match self.recv.read(&mut buf).await {
                 Ok(Some(n)) => {
-                    log::info!("🔍 [CLIENT-QUIC-RECV] Read {} raw bytes from QUIC endpoint", n);
-                    Some(Ok(BytesMut::from(&buf[..n])))
+                    let mut data = BytesMut::from(&buf[..n]);
+                    if let Some(encrypt) = self.key.as_mut() {
+                        if let Err(e) = encrypt.dec(&mut data) {
+                            log::error!("⚠️ [CLIENT-QUIC-RECV] QUIC decryption failed: {:?}", e);
+                            return Some(Err(e));
+                        }
+                    }
+                    log::info!("🔍 [CLIENT-QUIC-RECV] Read {} raw bytes from QUIC endpoint", data.len());
+                    Some(Ok(data))
                 }
                 Ok(None) => {
                     log::info!("🔌 [CLIENT-QUIC-RECV] QUIC recv returned EOF (None)");
@@ -177,8 +189,15 @@ impl QuicFramedStream {
                     let mut data_buf = vec![0u8; len];
                     match self.recv.read_exact(&mut data_buf).await {
                         Ok(()) => {
-                            log::info!("🔍 [CLIENT-QUIC-RECV] Read {} framed bytes from QUIC endpoint", len);
-                            Some(Ok(BytesMut::from(&data_buf[..])))
+                            let mut data = BytesMut::from(&data_buf[..]);
+                            if let Some(encrypt) = self.key.as_mut() {
+                                if let Err(e) = encrypt.dec(&mut data) {
+                                    log::error!("⚠️ [CLIENT-QUIC-RECV] QUIC decryption failed: {:?}", e);
+                                    return Some(Err(e));
+                                }
+                            }
+                            log::info!("🔍 [CLIENT-QUIC-RECV] Read {} framed bytes from QUIC endpoint", data.len());
+                            Some(Ok(data))
                         }
                         Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
                     }
