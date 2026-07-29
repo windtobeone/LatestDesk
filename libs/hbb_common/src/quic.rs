@@ -96,7 +96,7 @@ impl QuicFramedStream {
             recv,
             addr: target,
             key: None,
-            raw: false,
+            raw: true,
             send_timeout_ms: 10000,
         })
     }
