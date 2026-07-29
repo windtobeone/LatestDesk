@@ -153,9 +153,18 @@ impl QuicFramedStream {
         if self.raw {
             let mut buf = vec![0u8; 65536];
             match self.recv.read(&mut buf).await {
-                Ok(Some(n)) => Some(Ok(BytesMut::from(&buf[..n]))),
-                Ok(None) => None,
-                Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
+                Ok(Some(n)) => {
+                    log::info!("🔍 [CLIENT-QUIC-RECV] Read {} raw bytes from QUIC endpoint", n);
+                    Some(Ok(BytesMut::from(&buf[..n])))
+                }
+                Ok(None) => {
+                    log::info!("🔌 [CLIENT-QUIC-RECV] QUIC recv returned EOF (None)");
+                    None
+                }
+                Err(e) => {
+                    log::warn!("⚠️ [CLIENT-QUIC-RECV] QUIC recv error: {:?}", e);
+                    Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e)))
+                }
             }
         } else {
             let mut len_buf = [0u8; 4];
@@ -164,7 +173,10 @@ impl QuicFramedStream {
                     let len = u32::from_le_bytes(len_buf) as usize;
                     let mut data_buf = vec![0u8; len];
                     match self.recv.read_exact(&mut data_buf).await {
-                        Ok(()) => Some(Ok(BytesMut::from(&data_buf[..]))),
+                        Ok(()) => {
+                            log::info!("🔍 [CLIENT-QUIC-RECV] Read {} framed bytes from QUIC endpoint", len);
+                            Some(Ok(BytesMut::from(&data_buf[..])))
+                        }
                         Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
                     }
                 }
