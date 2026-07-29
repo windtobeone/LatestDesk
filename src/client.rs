@@ -579,6 +579,25 @@ impl Client {
                         }
 
                         if try_udp {
+                            let peer_quic = peer.clone();
+                            let uuid_quic = rr.uuid.clone();
+                            let rs_quic = rr.relay_server.clone();
+                            let key_quic = key.clone();
+                            connect_futures.push(
+                                async move {
+                                    let conn = Self::create_relay_quic(
+                                        &peer_quic,
+                                        uuid_quic,
+                                        rs_quic,
+                                        &key_quic,
+                                        conn_type,
+                                        my_addr.is_ipv4(),
+                                    ).await?;
+                                    Ok((conn, None, "QUIC"))
+                                }
+                                .boxed(),
+                            );
+
                             let peer_c = peer.clone();
                             let uuid_c = rr.uuid.clone();
                             let rs_c = rr.relay_server.clone();
@@ -983,6 +1002,26 @@ impl Client {
         let try_udp = !crate::is_udp_disabled();
         
         if try_udp {
+            let peer_quic = peer.to_owned();
+            let uuid_quic = uuid.clone();
+            let rs_quic = relay_server.clone();
+            let key_quic = key.to_owned();
+            connect_futures.push(
+                async move {
+                    let conn = Self::create_relay_quic(
+                        &peer_quic,
+                        uuid_quic,
+                        rs_quic,
+                        &key_quic,
+                        conn_type,
+                        ipv4,
+                    )
+                    .await?;
+                    Ok((conn, None, "QUIC"))
+                }
+                .boxed()
+            );
+
             let peer_c = peer.to_owned();
             let uuid_c = uuid.clone();
             let rs_c = relay_server.clone();
