@@ -43,10 +43,11 @@ impl QuicFramedStream {
         server_name: &str,
         ms_timeout: u64,
     ) -> ResultType<Self> {
-        let crypto = rustls::ClientConfig::builder()
+        let mut crypto = rustls::ClientConfig::builder()
             .with_safe_defaults()
             .with_custom_certificate_verifier(Arc::new(SkipServerVerification))
             .with_no_client_auth();
+        crypto.alpn_protocols = vec![b"rustdesk-quic-v1".to_vec()];
 
         let mut client_config = ClientConfig::new(Arc::new(crypto));
         let mut transport = quinn::TransportConfig::default();
@@ -108,15 +109,21 @@ impl QuicFramedStream {
     }
 
     pub async fn send_bytes(&mut self, bytes: Bytes) -> ResultType<()> {
-        let mut frame = BytesMut::with_capacity(4 + bytes.len());
-        frame.put_u32_le(bytes.len() as u32);
-        frame.extend_from_slice(&bytes);
-        
-        tokio::time::timeout(
-            Duration::from_millis(self.send_timeout_ms),
-            self.send.write_all(&frame)
-        ).await.map_err(|_| anyhow::anyhow!("QUIC send timeout"))??;
-        
+        if self.raw {
+            tokio::time::timeout(
+                Duration::from_millis(self.send_timeout_ms),
+                self.send.write_all(&bytes)
+            ).await.map_err(|_| anyhow::anyhow!("QUIC send timeout"))??;
+        } else {
+            let mut frame = BytesMut::with_capacity(4 + bytes.len());
+            frame.put_u32_le(bytes.len() as u32);
+            frame.extend_from_slice(&bytes);
+            
+            tokio::time::timeout(
+                Duration::from_millis(self.send_timeout_ms),
+                self.send.write_all(&frame)
+            ).await.map_err(|_| anyhow::anyhow!("QUIC send timeout"))??;
+        }
         Ok(())
     }
 
@@ -130,17 +137,26 @@ impl QuicFramedStream {
     }
 
     pub async fn next(&mut self) -> Option<Result<BytesMut, std::io::Error>> {
-        let mut len_buf = [0u8; 4];
-        match self.recv.read_exact(&mut len_buf).await {
-            Ok(()) => {
-                let len = u32::from_le_bytes(len_buf) as usize;
-                let mut data_buf = vec![0u8; len];
-                match self.recv.read_exact(&mut data_buf).await {
-                    Ok(()) => Some(Ok(BytesMut::from(&data_buf[..]))),
-                    Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
-                }
+        if self.raw {
+            let mut buf = vec![0u8; 65536];
+            match self.recv.read(&mut buf).await {
+                Ok(Some(n)) => Some(Ok(BytesMut::from(&buf[..n]))),
+                Ok(None) => None,
+                Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
             }
-            Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
+        } else {
+            let mut len_buf = [0u8; 4];
+            match self.recv.read_exact(&mut len_buf).await {
+                Ok(()) => {
+                    let len = u32::from_le_bytes(len_buf) as usize;
+                    let mut data_buf = vec![0u8; len];
+                    match self.recv.read_exact(&mut data_buf).await {
+                        Ok(()) => Some(Ok(BytesMut::from(&data_buf[..]))),
+                        Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
+                    }
+                }
+                Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
+            }
         }
     }
 

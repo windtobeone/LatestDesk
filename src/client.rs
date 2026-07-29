@@ -1064,7 +1064,7 @@ impl Client {
         Ok(conn)
     }
 
-    pub(crate) async fn create_relay_quic(
+    pub async fn create_relay_quic(
         peer: &str,
         uuid: String,
         relay_server: String,

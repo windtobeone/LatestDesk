@@ -20,6 +20,14 @@ path = "src/naming.rs"
 name = "service"
 path = "src/service.rs"
 
+[[bin]]
+name = "test_native_quic"
+path = "src/bin/test_native_quic.rs"
+
+[[bin]]
+name = "test_quic_relay_e2e"
+path = "src/bin/test_quic_relay_e2e.rs"
+
 [features]
 inline = []
 cli = []
