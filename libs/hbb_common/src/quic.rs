@@ -27,6 +27,18 @@ impl ServerCertVerifier for SkipServerVerification {
     }
 }
 
+#[inline(always)]
+pub fn normalize_tls_sni(server_name: &str) -> &str {
+    let clean_name = server_name.split(':').next().unwrap_or(server_name);
+    let clean_name = clean_name.trim_start_matches("https://").trim_start_matches("http://");
+
+    if clean_name.parse::<std::net::IpAddr>().is_ok() || clean_name.is_empty() {
+        "localhost"
+    } else {
+        clean_name
+    }
+}
+
 pub struct QuicFramedStream {
     conn: Connection,
     send: SendStream,
@@ -66,8 +78,9 @@ impl QuicFramedStream {
         let mut endpoint = Endpoint::client(bind_addr)?;
         endpoint.set_default_client_config(client_config);
 
-        info!("🚀 [NATIVE-QUIC] Connecting Native QUIC Endpoint to {} (server_name: {})", target, server_name);
-        let connecting = endpoint.connect(target, server_name)?;
+        let tls_sni = normalize_tls_sni(server_name);
+        info!("🚀 [NATIVE-QUIC] Connecting Native QUIC Endpoint to {} (server_name: {}, tls_sni: {})", target, server_name, tls_sni);
+        let connecting = endpoint.connect(target, tls_sni)?;
         
         let conn = tokio::time::timeout(
             Duration::from_millis(ms_timeout),
