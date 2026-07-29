@@ -64,6 +64,9 @@ impl QuicFramedStream {
         let mut client_config = ClientConfig::new(Arc::new(crypto));
         let mut transport = quinn::TransportConfig::default();
         transport.keep_alive_interval(Some(Duration::from_secs(10)));
+        transport.initial_mtu(1200);
+        transport.min_mtu(1200);
+        transport.mtu_discovery_config(None);
         if let Ok(idle) = IdleTimeout::try_from(Duration::from_secs(30)) {
             transport.max_idle_timeout(Some(idle));
         }
