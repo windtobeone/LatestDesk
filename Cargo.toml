@@ -28,6 +28,10 @@ path = "src/bin/test_native_quic.rs"
 name = "test_quic_relay_e2e"
 path = "src/bin/test_quic_relay_e2e.rs"
 
+[[bin]]
+name = "benchmark_quic_vs_tcp"
+path = "src/bin/benchmark_quic_vs_tcp.rs"
+
 [features]
 inline = []
 cli = []
