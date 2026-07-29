@@ -67,8 +67,7 @@ impl QuicFramedStream {
         endpoint.set_default_client_config(client_config);
 
         info!("🚀 [NATIVE-QUIC] Connecting Native QUIC Endpoint to {} (server_name: {})", target, server_name);
-        let tls_sni = "localhost";
-        let connecting = endpoint.connect(target, tls_sni)?;
+        let connecting = endpoint.connect(target, server_name)?;
         
         let conn = tokio::time::timeout(
             Duration::from_millis(ms_timeout),
