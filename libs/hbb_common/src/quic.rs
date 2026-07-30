@@ -224,10 +224,10 @@ impl QuicFramedStream {
                         if let Some(encrypt) = self.key.as_mut() {
                             // 必须全量执行 dec()，确保发送端与接收端 Nonce 计数器 100% 1对1 绝对同步！
                             if let Err(e) = encrypt.dec(&mut data) {
-                                // 容错处理：若为未加密的 KCP 底层控制小包 (len <= 30)，优雅跳过，不挂断通道
-                                if len <= 30 {
+                                // 容错处理：若为未加密的 KCP 底层控制/SACK确认包 (len <= 64)，优雅跳过，不挂断通道
+                                if len <= 64 {
                                     log::debug!(
-                                        "🧹 [NATIVE-QUIC-RECV] 容错跳过底层未加密 KCP 控制包: len={} B, error: {:?}",
+                                        "🧹 [NATIVE-QUIC-RECV] 容错跳过底层未加密 KCP 控制/ACK包: len={} B, error: {:?}",
                                         len,
                                         e
                                     );
