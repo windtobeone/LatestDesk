@@ -145,9 +145,11 @@ impl QuicFramedStream {
             ).await.map_err(|_| anyhow::anyhow!("QUIC send timeout"))??;
             let _ = self.send.flush().await;
         } else {
-            let mut frame = BytesMut::with_capacity(4 + bytes_to_send.len());
-            frame.put_u32_le(bytes_to_send.len() as u32);
-            frame.extend_from_slice(&bytes_to_send);
+            let mut codec = crate::bytes_codec::BytesCodec::new();
+            let mut frame = BytesMut::new();
+            if let Err(e) = codec.encode(bytes_to_send.clone(), &mut frame) {
+                return Err(anyhow::anyhow!("QUIC BytesCodec encode error: {:?}", e));
+            }
             
             log::debug!(
                 "📤 [NATIVE-QUIC-SEND] Sent framed packet: payload_len={} B, total_frame_len={} B, encrypted={}",
@@ -213,18 +215,11 @@ impl QuicFramedStream {
                 }
             }
         } else {
+            let mut codec = crate::bytes_codec::BytesCodec::new();
             loop {
-                if self.read_buf.len() >= 4 {
-                    let len = u32::from_le_bytes([
-                        self.read_buf[0],
-                        self.read_buf[1],
-                        self.read_buf[2],
-                        self.read_buf[3],
-                    ]) as usize;
-
-                    if self.read_buf.len() >= 4 + len {
-                        self.read_buf.split_to(4); // consume length header
-                        let mut data = self.read_buf.split_to(len);
+                match codec.decode(&mut self.read_buf) {
+                    Ok(Some(mut data)) => {
+                        let len = data.len();
                         if let Some(encrypt) = self.key.as_mut() {
                             if let Err(e) = encrypt.dec(&mut data) {
                                 log::error!(
@@ -243,6 +238,11 @@ impl QuicFramedStream {
                             log::debug!("🔍 [NATIVE-QUIC-RECV] Read {} framed unencrypted bytes from QUIC endpoint", data.len());
                         }
                         return Some(Ok(data));
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        log::error!("❌ [NATIVE-QUIC-RECV] BytesCodec decode error: {:?}", e);
+                        return Some(Err(e));
                     }
                 }
 
