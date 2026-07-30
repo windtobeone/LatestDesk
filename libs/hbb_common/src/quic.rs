@@ -99,7 +99,7 @@ impl QuicFramedStream {
             recv,
             addr: target,
             key: None,
-            raw: true,
+            raw: false,
             send_timeout_ms: 10000,
         })
     }
@@ -113,6 +113,7 @@ impl QuicFramedStream {
     }
 
     pub fn set_key(&mut self, key: sodiumoxide::crypto::secretbox::Key) {
+        info!("🔐 [NATIVE-QUIC] Symmetric encryption key registered successfully on QUIC stream!");
         self.key = Some(crate::tcp::Encrypt::new(key));
     }
 
@@ -125,12 +126,15 @@ impl QuicFramedStream {
     }
 
     pub async fn send_bytes(&mut self, bytes: Bytes) -> ResultType<()> {
+        let is_encrypted = self.key.is_some();
         let bytes_to_send = if let Some(encrypt) = self.key.as_mut() {
             Bytes::from(encrypt.enc(&bytes))
         } else {
             bytes
         };
+
         if self.raw {
+            log::debug!("📤 [NATIVE-QUIC-SEND] Sending raw un-framed packet: len={} B", bytes_to_send.len());
             tokio::time::timeout(
                 Duration::from_millis(self.send_timeout_ms),
                 self.send.write_all(&bytes_to_send)
@@ -140,6 +144,13 @@ impl QuicFramedStream {
             frame.put_u32_le(bytes_to_send.len() as u32);
             frame.extend_from_slice(&bytes_to_send);
             
+            log::debug!(
+                "📤 [NATIVE-QUIC-SEND] Sent framed packet: payload_len={} B, total_frame_len={} B, encrypted={}",
+                bytes_to_send.len(),
+                frame.len(),
+                is_encrypted
+            );
+
             tokio::time::timeout(
                 Duration::from_millis(self.send_timeout_ms),
                 self.send.write_all(&frame)
@@ -149,6 +160,7 @@ impl QuicFramedStream {
     }
 
     pub async fn send_raw(&mut self, bytes: Vec<u8>) -> ResultType<()> {
+        log::debug!("📤 [NATIVE-QUIC-SEND] Sending raw bytes: len={} B", bytes.len());
         tokio::time::timeout(
             Duration::from_millis(self.send_timeout_ms),
             self.send.write_all(&bytes)
@@ -165,19 +177,21 @@ impl QuicFramedStream {
                     let mut data = BytesMut::from(&buf[..n]);
                     if let Some(encrypt) = self.key.as_mut() {
                         if let Err(e) = encrypt.dec(&mut data) {
-                            log::error!("⚠️ [CLIENT-QUIC-RECV] QUIC decryption failed: {:?}", e);
+                            log::error!("❌ [NATIVE-QUIC-RECV] QUIC raw decryption failed on {} B! Error: {:?}", n, e);
                             return Some(Err(e));
                         }
+                        log::debug!("✅ [NATIVE-QUIC-RECV] QUIC raw payload decrypted: len={} B", data.len());
+                    } else {
+                        log::debug!("🔍 [NATIVE-QUIC-RECV] Read {} raw unencrypted bytes from QUIC endpoint", data.len());
                     }
-                    log::info!("🔍 [CLIENT-QUIC-RECV] Read {} raw bytes from QUIC endpoint", data.len());
                     Some(Ok(data))
                 }
                 Ok(None) => {
-                    log::info!("🔌 [CLIENT-QUIC-RECV] QUIC recv returned EOF (None)");
+                    log::info!("🔌 [NATIVE-QUIC-RECV] QUIC stream returned EOF");
                     None
                 }
                 Err(e) => {
-                    log::warn!("⚠️ [CLIENT-QUIC-RECV] QUIC recv error: {:?}", e);
+                    log::warn!("⚠️ [NATIVE-QUIC-RECV] QUIC stream raw read error: {:?}", e);
                     Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e)))
                 }
             }
@@ -190,19 +204,36 @@ impl QuicFramedStream {
                     match self.recv.read_exact(&mut data_buf).await {
                         Ok(()) => {
                             let mut data = BytesMut::from(&data_buf[..]);
+                            let is_encrypted = self.key.is_some();
                             if let Some(encrypt) = self.key.as_mut() {
                                 if let Err(e) = encrypt.dec(&mut data) {
-                                    log::error!("⚠️ [CLIENT-QUIC-RECV] QUIC decryption failed: {:?}", e);
+                                    log::error!(
+                                        "❌ [NATIVE-QUIC-RECV] QUIC framed decryption failed! cipher_len={} B, error: {:?}",
+                                        len,
+                                        e
+                                    );
                                     return Some(Err(e));
                                 }
+                                log::debug!(
+                                    "✅ [NATIVE-QUIC-RECV] QUIC frame decrypted successfully: cipher_len={} B -> plain_len={} B",
+                                    len,
+                                    data.len()
+                                );
+                            } else {
+                                log::debug!("🔍 [NATIVE-QUIC-RECV] Read {} framed unencrypted bytes from QUIC endpoint", data.len());
                             }
-                            log::info!("🔍 [CLIENT-QUIC-RECV] Read {} framed bytes from QUIC endpoint", data.len());
                             Some(Ok(data))
                         }
-                        Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
+                        Err(e) => {
+                            log::warn!("⚠️ [NATIVE-QUIC-RECV] QUIC read body failed (expected {} B): {:?}", len, e);
+                            Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e)))
+                        }
                     }
                 }
-                Err(e) => Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e))),
+                Err(e) => {
+                    log::info!("🔌 [NATIVE-QUIC-RECV] QUIC stream closed by peer (header EOF): {:?}", e);
+                    None
+                }
             }
         }
     }
