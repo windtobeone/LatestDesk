@@ -372,6 +372,9 @@ impl RendezvousMediator {
                         #[cfg(target_os = "android")]
                         notify_android_needs_deploy();
                     }
+                    Ok(register_pk_response::Result::TOO_FREQUENT) => {
+                        log::warn!("RegisterPk rate-limited by server (TOO_FREQUENT). Cooling down registration attempts.");
+                    }
                     _ => {
                         log::error!("unknown RegisterPkResponse");
                     }
