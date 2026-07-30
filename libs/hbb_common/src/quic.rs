@@ -222,9 +222,30 @@ impl QuicFramedStream {
                     Ok(Some(mut data)) => {
                         let len = data.len();
                         if let Some(encrypt) = self.key.as_mut() {
+                            // 1. 特征识别：若为 KCP 协议层 30 字节内部控制/心跳包 (cmd = 96/32/16/82)，安全剔除
+                            if len <= 30 && data.len() >= 5 {
+                                let cmd = data[4];
+                                if cmd == 96 || cmd == 32 || cmd == 16 || cmd == 82 {
+                                    log::debug!(
+                                        "🧹 [NATIVE-QUIC-RECV] 精准识别并剔除 KCP 协议层控制包: len={} B, cmd={}",
+                                        len,
+                                        cmd
+                                    );
+                                    continue;
+                                }
+                            }
                             if let Err(e) = encrypt.dec(&mut data) {
+                                // 2. 兜底容错：若未拦截到的 ≤30 字节底层控制包解密失败，容错跳过，不中断通道
+                                if len <= 30 {
+                                    log::warn!(
+                                        "🧹 [NATIVE-QUIC-RECV] 容错跳过底层控制包解密异常: len={} B, error: {:?}",
+                                        len,
+                                        e
+                                    );
+                                    continue;
+                                }
                                 log::error!(
-                                    "❌ [NATIVE-QUIC-RECV] QUIC framed decryption failed! cipher_len={} B, error: {:?}",
+                                    "❌ [NATIVE-QUIC-RECV] QUIC 真实加密画面帧解密失败! cipher_len={} B, error: {:?}",
                                     len,
                                     e
                                 );
