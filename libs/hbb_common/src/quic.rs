@@ -47,6 +47,7 @@ pub struct QuicFramedStream {
     key: Option<crate::tcp::Encrypt>,
     raw: bool,
     send_timeout_ms: u64,
+    read_buf: BytesMut,
 }
 
 impl QuicFramedStream {
@@ -101,6 +102,7 @@ impl QuicFramedStream {
             key: None,
             raw: true,
             send_timeout_ms: 10000,
+            read_buf: BytesMut::new(),
         })
     }
 
@@ -172,6 +174,16 @@ impl QuicFramedStream {
 
     pub async fn next(&mut self) -> Option<Result<BytesMut, std::io::Error>> {
         if self.raw {
+            if !self.read_buf.is_empty() {
+                let mut data = self.read_buf.split_to(self.read_buf.len());
+                if let Some(encrypt) = self.key.as_mut() {
+                    if let Err(e) = encrypt.dec(&mut data) {
+                        log::error!("❌ [NATIVE-QUIC-RECV] QUIC raw decryption failed on {} B! Error: {:?}", data.len(), e);
+                        return Some(Err(e));
+                    }
+                }
+                return Some(Ok(data));
+            }
             let mut buf = vec![0u8; 65536];
             match self.recv.read(&mut buf).await {
                 Ok(Some(n)) => {
@@ -197,43 +209,60 @@ impl QuicFramedStream {
                 }
             }
         } else {
-            let mut len_buf = [0u8; 4];
-            match self.recv.read_exact(&mut len_buf).await {
-                Ok(()) => {
-                    let len = u32::from_le_bytes(len_buf) as usize;
-                    let mut data_buf = vec![0u8; len];
-                    match self.recv.read_exact(&mut data_buf).await {
-                        Ok(()) => {
-                            let mut data = BytesMut::from(&data_buf[..]);
-                            let is_encrypted = self.key.is_some();
-                            if let Some(encrypt) = self.key.as_mut() {
-                                if let Err(e) = encrypt.dec(&mut data) {
-                                    log::error!(
-                                        "❌ [NATIVE-QUIC-RECV] QUIC framed decryption failed! cipher_len={} B, error: {:?}",
-                                        len,
-                                        e
-                                    );
-                                    return Some(Err(e));
-                                }
-                                log::debug!(
-                                    "✅ [NATIVE-QUIC-RECV] QUIC frame decrypted successfully: cipher_len={} B -> plain_len={} B",
+            loop {
+                if self.read_buf.len() >= 4 {
+                    let len = u32::from_le_bytes([
+                        self.read_buf[0],
+                        self.read_buf[1],
+                        self.read_buf[2],
+                        self.read_buf[3],
+                    ]) as usize;
+
+                    if self.read_buf.len() >= 4 + len {
+                        self.read_buf.split_to(4); // consume length header
+                        let mut data = self.read_buf.split_to(len);
+                        if let Some(encrypt) = self.key.as_mut() {
+                            if let Err(e) = encrypt.dec(&mut data) {
+                                log::error!(
+                                    "❌ [NATIVE-QUIC-RECV] QUIC framed decryption failed! cipher_len={} B, error: {:?}",
                                     len,
-                                    data.len()
+                                    e
                                 );
-                            } else {
-                                log::debug!("🔍 [NATIVE-QUIC-RECV] Read {} framed unencrypted bytes from QUIC endpoint", data.len());
+                                return Some(Err(e));
                             }
-                            Some(Ok(data))
+                            log::debug!(
+                                "✅ [NATIVE-QUIC-RECV] QUIC frame decrypted successfully: cipher_len={} B -> plain_len={} B",
+                                len,
+                                data.len()
+                            );
+                        } else {
+                            log::debug!("🔍 [NATIVE-QUIC-RECV] Read {} framed unencrypted bytes from QUIC endpoint", data.len());
                         }
-                        Err(e) => {
-                            log::warn!("⚠️ [NATIVE-QUIC-RECV] QUIC read body failed (expected {} B): {:?}", len, e);
-                            Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e)))
-                        }
+                        return Some(Ok(data));
                     }
                 }
-                Err(e) => {
-                    log::info!("🔌 [NATIVE-QUIC-RECV] QUIC stream closed by peer (header EOF): {:?}", e);
-                    None
+
+                let mut tmp = [0u8; 65536];
+                match self.recv.read(&mut tmp).await {
+                    Ok(Some(n)) => {
+                        self.read_buf.extend_from_slice(&tmp[..n]);
+                    }
+                    Ok(None) => {
+                        if self.read_buf.is_empty() {
+                            log::info!("🔌 [NATIVE-QUIC-RECV] QUIC stream closed by peer (EOF)");
+                            return None;
+                        } else {
+                            log::warn!(
+                                "⚠️ [NATIVE-QUIC-RECV] QUIC stream closed with incomplete frame ({} B remaining in buffer)",
+                                self.read_buf.len()
+                            );
+                            return Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "incomplete frame on EOF")));
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("⚠️ [NATIVE-QUIC-RECV] QUIC stream read error: {:?}", e);
+                        return Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, e)));
+                    }
                 }
             }
         }
