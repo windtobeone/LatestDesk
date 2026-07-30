@@ -99,7 +99,7 @@ impl QuicFramedStream {
             recv,
             addr: target,
             key: None,
-            raw: false,
+            raw: true,
             send_timeout_ms: 10000,
         })
     }
@@ -113,8 +113,9 @@ impl QuicFramedStream {
     }
 
     pub fn set_key(&mut self, key: sodiumoxide::crypto::secretbox::Key) {
-        info!("🔐 [NATIVE-QUIC] Symmetric encryption key registered successfully on QUIC stream!");
+        info!("🔐 [NATIVE-QUIC] Symmetric encryption key registered successfully on QUIC stream! Switching to framed stream mode.");
         self.key = Some(crate::tcp::Encrypt::new(key));
+        self.raw = false;
     }
 
     pub fn is_secured(&self) -> bool {
