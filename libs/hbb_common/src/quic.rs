@@ -9,6 +9,7 @@ use log::info;
 use quinn::{ClientConfig, Endpoint, Connection, SendStream, RecvStream, IdleTimeout};
 use rustls::client::{ServerCertVerifier, ServerCertVerified};
 use rustls::Certificate;
+use tokio::io::AsyncWriteExt;
 use crate::ResultType;
 
 struct SkipServerVerification;
@@ -64,11 +65,11 @@ impl QuicFramedStream {
 
         let mut client_config = ClientConfig::new(Arc::new(crypto));
         let mut transport = quinn::TransportConfig::default();
-        transport.keep_alive_interval(Some(Duration::from_secs(10)));
+        transport.keep_alive_interval(Some(Duration::from_secs(1)));
         transport.initial_mtu(1200);
         transport.min_mtu(1200);
         transport.mtu_discovery_config(None);
-        if let Ok(idle) = IdleTimeout::try_from(Duration::from_secs(30)) {
+        if let Ok(idle) = IdleTimeout::try_from(Duration::from_secs(60)) {
             transport.max_idle_timeout(Some(idle));
         }
         client_config.transport_config(Arc::new(transport));
@@ -142,6 +143,7 @@ impl QuicFramedStream {
                 Duration::from_millis(self.send_timeout_ms),
                 self.send.write_all(&bytes_to_send)
             ).await.map_err(|_| anyhow::anyhow!("QUIC send timeout"))??;
+            let _ = self.send.flush().await;
         } else {
             let mut frame = BytesMut::with_capacity(4 + bytes_to_send.len());
             frame.put_u32_le(bytes_to_send.len() as u32);
@@ -158,6 +160,7 @@ impl QuicFramedStream {
                 Duration::from_millis(self.send_timeout_ms),
                 self.send.write_all(&frame)
             ).await.map_err(|_| anyhow::anyhow!("QUIC send timeout"))??;
+            let _ = self.send.flush().await;
         }
         Ok(())
     }
@@ -168,6 +171,7 @@ impl QuicFramedStream {
             Duration::from_millis(self.send_timeout_ms),
             self.send.write_all(&bytes)
         ).await.map_err(|_| anyhow::anyhow!("QUIC send raw timeout"))??;
+        let _ = self.send.flush().await;
         
         Ok(())
     }
