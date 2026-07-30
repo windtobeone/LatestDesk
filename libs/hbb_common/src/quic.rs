@@ -222,23 +222,12 @@ impl QuicFramedStream {
                     Ok(Some(mut data)) => {
                         let len = data.len();
                         if let Some(encrypt) = self.key.as_mut() {
-                            // 1. 特征识别：若为 KCP 协议层 30 字节内部控制/心跳包 (cmd = 96/32/16/82)，安全剔除
-                            if len <= 30 && data.len() >= 5 {
-                                let cmd = data[4];
-                                if cmd == 96 || cmd == 32 || cmd == 16 || cmd == 82 {
-                                    log::debug!(
-                                        "🧹 [NATIVE-QUIC-RECV] 精准识别并剔除 KCP 协议层控制包: len={} B, cmd={}",
-                                        len,
-                                        cmd
-                                    );
-                                    continue;
-                                }
-                            }
+                            // 必须全量执行 dec()，确保发送端与接收端 Nonce 计数器 100% 1对1 绝对同步！
                             if let Err(e) = encrypt.dec(&mut data) {
-                                // 2. 兜底容错：若未拦截到的 ≤30 字节底层控制包解密失败，容错跳过，不中断通道
+                                // 容错处理：若为未加密的 KCP 底层控制小包 (len <= 30)，优雅跳过，不挂断通道
                                 if len <= 30 {
-                                    log::warn!(
-                                        "🧹 [NATIVE-QUIC-RECV] 容错跳过底层控制包解密异常: len={} B, error: {:?}",
+                                    log::debug!(
+                                        "🧹 [NATIVE-QUIC-RECV] 容错跳过底层未加密 KCP 控制包: len={} B, error: {:?}",
                                         len,
                                         e
                                     );
