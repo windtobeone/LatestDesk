@@ -1028,6 +1028,8 @@ impl Client {
             let key_c = key.to_owned();
             connect_futures.push(
                 async move {
+                    // 若 QUIC 已启用，给 Native QUIC 预留 500ms 优先建立时间，防止并发并发赛马重复握手
+                    tokio::time::sleep(Duration::from_millis(500)).await;
                     let res = Self::create_relay_kcp(
                         &peer_c,
                         uuid_c,
@@ -1052,7 +1054,7 @@ impl Client {
             connect_futures.push(
                 async move {
                     if try_udp {
-                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        tokio::time::sleep(Duration::from_millis(1000)).await;
                     }
                     let res = Self::create_relay(
                         &peer_c,
