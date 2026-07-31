@@ -17,6 +17,7 @@ use std::{
 };
 pub use tokio;
 pub use tokio_util;
+pub mod net;
 pub mod proxy;
 pub mod quic;
 pub mod socket_client;
