@@ -130,6 +130,7 @@ impl QuicFramedStream {
         self.conn.local_ip().map(|ip| SocketAddr::new(ip, 0)).unwrap_or(self.addr)
     }
 
+    #[inline(always)]
     pub async fn send_bytes(&mut self, bytes: Bytes) -> ResultType<()> {
         let is_encrypted = self.key.is_some();
         let bytes_to_send = if let Some(encrypt) = self.key.as_mut() {
@@ -144,7 +145,6 @@ impl QuicFramedStream {
                 Duration::from_millis(self.send_timeout_ms),
                 self.send.write_all(&bytes_to_send)
             ).await.map_err(|_| anyhow::anyhow!("QUIC send timeout"))??;
-            let _ = self.send.flush().await;
         } else {
             let mut codec = crate::bytes_codec::BytesCodec::new();
             let mut frame = BytesMut::new();
@@ -163,18 +163,17 @@ impl QuicFramedStream {
                 Duration::from_millis(self.send_timeout_ms),
                 self.send.write_all(&frame)
             ).await.map_err(|_| anyhow::anyhow!("QUIC send timeout"))??;
-            let _ = self.send.flush().await;
         }
         Ok(())
     }
 
+    #[inline(always)]
     pub async fn send_raw(&mut self, bytes: Vec<u8>) -> ResultType<()> {
         log::debug!("📤 [NATIVE-QUIC-SEND] Sending raw bytes: len={} B", bytes.len());
         tokio::time::timeout(
             Duration::from_millis(self.send_timeout_ms),
             self.send.write_all(&bytes)
         ).await.map_err(|_| anyhow::anyhow!("QUIC send raw timeout"))??;
-        let _ = self.send.flush().await;
         
         Ok(())
     }
